@@ -131,13 +131,15 @@ def main():
     parser.add_argument("--weights", default="weights/best.pt")
     parser.add_argument("--imgsz", type=int, default=640)
     parser.add_argument("--device", default="0")
+    parser.add_argument("--tag", default="", help="sufijo de la carpeta de salida (p. ej. _onnx para el modelo exportado)")
     args = parser.parse_args()
 
     run = (ROOT / args.run).resolve()
     dataset = (ROOT / args.dataset).resolve()
-    out = run / "evaluacion"
+    out = run / f"evaluacion{args.tag}"
     out.mkdir(exist_ok=True)
-    model = YOLO(str(run / args.weights))
+    weights = Path(args.weights) if Path(args.weights).is_absolute() else run / args.weights
+    model = YOLO(str(weights), task="detect")
     device = args.device
 
     val_records, _ = predict_split(model, dataset / "images" / "val", dataset / "labels" / "val", args.imgsz, device)
@@ -145,7 +147,7 @@ def main():
     best_conf = min(THRESHOLDS, key=lambda t: (sweep[t]["mae"], -sweep[t]["exact_rate"]))
     print(f"Umbral de conteo elegido en validación: {best_conf} (MAE val {sweep[best_conf]['mae']})")
 
-    results = {"weights": str(run / args.weights), "count_conf_threshold": best_conf,
+    results = {"weights": str(weights), "count_conf_threshold": best_conf,
                "val_count_sweep": {str(k): v for k, v in sweep.items()}, "splits": {}}
     splits = [("val", dataset / "data.yaml"), ("test", dataset / "data.yaml")]
     if (dataset / "data_externo.yaml").exists():

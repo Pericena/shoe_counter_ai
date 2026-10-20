@@ -1,3 +1,4 @@
 -r requirements.txt
+# Además: pip install --no-deps -r requirements-nodeps.txt
 pytest==8.4.2
 pyflakes==3.4.0

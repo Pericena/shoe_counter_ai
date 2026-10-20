@@ -14,8 +14,8 @@ WORKDIR /srv/backend
 RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY backend/requirements.txt .
-RUN pip install -r requirements.txt
+COPY backend/requirements.txt backend/requirements-nodeps.txt ./
+RUN pip install -r requirements.txt && pip install --no-deps -r requirements-nodeps.txt
 
 COPY backend/ /srv/backend/
 COPY web/ /srv/web/

@@ -1,7 +1,8 @@
 // Productos (modelo comercial), variantes (talla+color), fotos y catálogos: marcas, categorías, proveedores.
 import { api } from "../api.js";
+import { productCard } from "../productcard.js";
 import {
-  badge, confirmDialog, el, empty, field, fmt, formValues, icon, modal, options, pageHead, pagedTable,
+  MOVEMENT_LABELS, badge, confirmDialog, el, empty, field, fmt, formValues, icon, modal, options, pageHead, pagedTable,
   queryString, showError, stockBadge, toast,
 } from "../ui.js";
 
@@ -57,6 +58,7 @@ function renderList(root, { can }) {
         { label: "Pares", className: "num", render: (p) => fmt.int(p.stock_pairs) },
         { label: "Estado", render: (p) => badge(p.status === "activo" ? "good" : "", p.status) },
         { label: "Tienda", render: (p) => p.is_published ? badge("info", "Publicado") : badge("", "No publicado") },
+        { label: "", className: "num", render: (p) => manage ? quickPhoto(p, () => table.reload(false)) : null },
       ],
     });
     const filters = el("form.filters", { on: { submit: (e) => { e.preventDefault(); table.reload(); } } },
@@ -111,6 +113,16 @@ function renderList(root, { can }) {
   }
 }
 
+function quickPhoto(product, done) {
+  const id = `quick-photo-${product.id}`;
+  const input = el("input", { type: "file", accept: "image/jpeg,image/png,image/webp", multiple: true, class: "sr-only", id });
+  input.addEventListener("change", async () => {
+    const uploaded = await uploadPhotos(product.id, input.files);
+    if (uploaded) { toast(`${uploaded} foto(s) subida(s) a ${product.code}`, "good"); done(); }
+  });
+  return el("span", {}, input, el("label.btn.small", { for: id, title: "Subir fotos" }, icon("camera"), "Foto"));
+}
+
 function askName(title, value = "") {
   return modal(title, (body, close, foot) => {
     const input = el("input", { value, maxlength: 100, required: true });
@@ -149,14 +161,15 @@ function supplierDialog(supplier, done) {
   });
 }
 
-function productForm(product) {
+function productForm(product, prefill = {}) {
+  const brandId = product?.brand_id ?? catalogs.brands.find((b) => b.name.toLowerCase() === (prefill.brand || "").toLowerCase())?.id;
   if (!catalogs.brands.length) {
     return el("div.alert.warn", {}, "Primero crea al menos una marca en la pestaña «Marcas».");
   }
   return el("form.form.two", {},
-    field("Código interno *", el("input", { name: "code", required: true, maxlength: 50, value: product?.code || "" })),
-    field("Marca *", options(el("select", { name: "brand_id", required: true }), catalogs.brands, { placeholder: "Selecciona", selected: product?.brand_id })),
-    el("label.field.full", {}, "Modelo *", el("input", { name: "model_name", required: true, maxlength: 150, value: product?.model_name || "" })),
+    field("Código interno *", el("input", { name: "code", required: true, maxlength: 50, value: product?.code || prefill.code || "" })),
+    field("Marca *", options(el("select", { name: "brand_id", required: true }), catalogs.brands, { placeholder: "Selecciona", selected: brandId })),
+    el("label.field.full", {}, "Modelo *", el("input", { name: "model_name", required: true, maxlength: 150, value: product?.model_name || prefill.model_name || "" })),
     field("Categoría", options(el("select", { name: "category_id" }), catalogs.categories, { placeholder: "Sin categoría", selected: product?.category_id })),
     field("Tipo de calzado", el("input", { name: "footwear_type", maxlength: 100, value: product?.footwear_type || "", placeholder: "Zapatilla, bota, sandalia…" })),
     field("Proveedor", options(el("select", { name: "supplier_id" }), catalogs.suppliers, { placeholder: "Sin proveedor", selected: product?.supplier_id })),
@@ -164,12 +177,38 @@ function productForm(product) {
       { id: "descontinuado", name: "Descontinuado" }], { selected: product?.status || "activo" })),
     el("label.field.full", {}, "Descripción", el("textarea", { name: "description", maxlength: 5000 }, product?.description || "")),
     el("label.check.full", {}, el("input", { type: "checkbox", name: "is_published", checked: Boolean(product?.is_published) }),
-      "Publicar en la tienda online (solo variantes activas con precio)"));
+      "Publicar en la tienda online (solo variantes activas con precio)"),
+    photoPicker());
 }
 
-function productDialog(product, done) {
+/** Selector de fotos con vista previa local; se suben al guardar el producto. */
+function photoPicker() {
+  const input = el("input", { type: "file", name: "photos", accept: "image/jpeg,image/png,image/webp", multiple: true });
+  const preview = el("div.photos");
+  input.addEventListener("change", () => {
+    preview.replaceChildren(...[...input.files].slice(0, 8).map((file) => {
+      const url = URL.createObjectURL(file);
+      return el("figure", {}, el("img", { src: url, alt: file.name, on: { load: () => URL.revokeObjectURL(url) } }));
+    }));
+  });
+  return el("label.field.full", {}, "Fotografías (JPG, PNG o WEBP; hasta 8)", input, preview,
+    el("span.small.muted", {}, "Se guardan sin metadatos (EXIF/GPS). La primera es la portada en la tienda."));
+}
+
+async function uploadPhotos(productId, files) {
+  let ok = 0;
+  for (const file of [...files].slice(0, 8)) {
+    const form = new FormData();
+    form.append("image", file);
+    try { await api.upload(`/api/products/${productId}/images`, form); ok += 1; } catch (e) { showError(e); }
+  }
+  return ok;
+}
+
+function productDialog(product, done, prefill) {
   return modal(product ? "Editar producto" : "Nuevo producto", (body, close, foot) => {
-    const form = productForm(product);
+    const form = productForm(product, prefill);
+    if (prefill?.note) body.append(el("div.alert.info", {}, prefill.note));
     body.append(form);
     foot.append(el("button.btn", { type: "button", on: { click: () => close(null) } }, "Cancelar"),
       form.tagName === "FORM" ? el("button.btn.primary", {
@@ -180,8 +219,11 @@ function productDialog(product, done) {
             const data = formValues(form, { ints: ["brand_id", "category_id", "supplier_id"], keepEmpty: product ? ["category_id", "supplier_id", "footwear_type", "description"] : [] });
             for (const key of ["category_id", "supplier_id"]) if (Number.isNaN(data[key])) data[key] = null;
             try {
+              delete data.photos;
               const saved = product ? await api.patch(`/api/products/${product.id}`, data) : await api.post("/api/products", data);
-              toast("Producto guardado", "good");
+              const files = form.querySelector("input[name=photos]").files;
+              const uploaded = files.length ? await uploadPhotos(saved.id, files) : 0;
+              toast(uploaded ? `Producto guardado con ${uploaded} foto(s)` : "Producto guardado", "good");
               close(saved);
               if (done) done(saved);
               else location.hash = `#/productos/${saved.id}`;
@@ -192,15 +234,16 @@ function productDialog(product, done) {
   });
 }
 
-function variantDialog(product, variant, done) {
+function variantDialog(product, variant, done, prefill = {}) {
   return modal(variant ? `Editar variante ${variant.sku}` : "Nueva variante (talla + color)", (body, close, foot) => {
+    if (prefill.note) body.append(el("div.alert.info", {}, prefill.note));
     const form = el("form.form.two", {},
-      field("SKU *", el("input", { name: "sku", required: true, maxlength: 60, value: variant?.sku || "" })),
-      field("Código de barras", el("input", { name: "barcode", maxlength: 64, value: variant?.barcode || "" })),
-      field("Talla *", el("input", { name: "size", required: true, maxlength: 20, value: variant?.size || "" })),
-      field("Color *", el("input", { name: "color", required: true, maxlength: 50, value: variant?.color || "" })),
+      field("SKU *", el("input", { name: "sku", required: true, maxlength: 60, value: variant?.sku || prefill.sku || "" })),
+      field("Código de barras", el("input", { name: "barcode", maxlength: 64, value: variant?.barcode || prefill.barcode || "" })),
+      field("Talla *", el("input", { name: "size", required: true, maxlength: 20, value: variant?.size || prefill.size || "" })),
+      field("Color *", el("input", { name: "color", required: true, maxlength: 50, value: variant?.color || prefill.color || "" })),
       field("Costo de adquisición", el("input", { name: "cost", type: "number", min: 0, step: "0.01", value: variant?.cost ?? "" })),
-      field("Precio de venta", el("input", { name: "price", type: "number", min: 0, step: "0.01", value: variant?.price ?? "" })),
+      field("Precio de venta", el("input", { name: "price", type: "number", min: 0, step: "0.01", value: variant?.price ?? prefill.price ?? "" })),
       field("Stock mínimo (alerta)", el("input", { name: "min_stock", type: "number", min: 0, step: 1, value: variant?.min_stock ?? 0 })),
       field("Estado", options(el("select", { name: "status" }), [{ id: "activo", name: "Activo" }, { id: "inactivo", name: "Inactivo" },
         { id: "descontinuado", name: "Descontinuado" }], { selected: variant?.status || "activo" })),
@@ -227,9 +270,25 @@ function variantDialog(product, variant, done) {
   });
 }
 
+const VARIANT_PREFILL_KEY = "shoe-variant-prefill";
+
+/** Abre «Nuevo producto» con datos leídos de una etiqueta; tras guardarlo propone la variante. */
+export async function openNewProductFromLabel(prefill) {
+  await loadCatalogs();
+  try { sessionStorage.setItem(VARIANT_PREFILL_KEY, JSON.stringify(prefill.variant || {})); } catch { /* sin almacenamiento */ }
+  return productDialog(null, null, prefill);
+}
+
+/** Abre «Nueva variante» sobre un producto existente con datos leídos de una etiqueta. */
+export async function openNewVariantFromLabel(productId, prefill) {
+  try { sessionStorage.setItem(VARIANT_PREFILL_KEY, JSON.stringify(prefill)); } catch { /* sin almacenamiento */ }
+  location.hash = `#/productos/${productId}`;
+}
+
 async function renderDetail(root, productId, { can }) {
   const manage = can("products.manage");
-  const product = await api.get(`/api/products/${productId}`);
+  const [product, overview] = await Promise.all([
+    api.get(`/api/products/${productId}`), api.get(`/api/products/${productId}/overview`)]);
   const reload = () => { root.replaceChildren(); renderDetail(root, productId, { can }); };
   root.append(pageHead(`${product.brand} ${product.model_name}`, `Código ${product.code} · ${product.category || "sin categoría"}`,
     el("a.btn", { href: "#/productos" }, "← Volver"),
@@ -283,4 +342,24 @@ async function renderDetail(root, productId, { can }) {
         manage ? el("button.btn.small", { type: "button", on: { click: () => variantDialog(product, v, reload) } }, "Editar") : null))))))
     : empty("Sin variantes", manage ? "Añade las tallas y colores con «Nueva variante»." : ""));
   root.append(el("div.stack", {}, variants));
+  root.append(el("div.stack", {}, productCard(overview, { title: "Ficha e inventario del producto" })));
+  const related = el("div.grid.cols-2.stack");
+  related.append(el("div.card", {}, el("h2", {}, "Últimos movimientos"), overview.recent_movements.length
+    ? el("ul.list", {}, overview.recent_movements.slice(0, 12).map((m) => el("li", {},
+      el("span", {}, el("strong", {}, MOVEMENT_LABELS[m.movement_type] || m.movement_type), " · ", el("span.mono", {}, m.sku),
+        el("div.small.muted", {}, `${fmt.datetime(m.created_at)} · ${m.user || "sistema"}${m.reference ? " · " + m.reference : ""}`)),
+      el("span.num", {}, (m.quantity > 0 ? "+" : "") + m.quantity, el("div.small.muted", {}, `saldo ${m.balance_after}`)))))
+    : empty("Sin movimientos", "Registra la primera entrada en Existencias.")));
+  related.append(el("div.card", {}, el("h2", {}, "Conteos aplicados a este producto"), overview.recent_counts.length
+    ? el("ul.list", {}, overview.recent_counts.map((c) => el("li", {},
+      el("span", {}, el("a", { href: `#/conteo/${c.id}` }, `Conteo #${c.id}`), ` · ${c.variant_sku}`,
+        el("div.small.muted", {}, fmt.datetime(c.applied_at || c.created_at))),
+      el("span.num", {}, c.difference === null ? "—" : `${c.difference > 0 ? "+" : ""}${c.difference}`))))
+    : empty("Sin conteos", "Los conteos con foto conciliados con este producto aparecerán aquí.")));
+  root.append(related);
+  let pending = null;
+  try { pending = JSON.parse(sessionStorage.getItem(VARIANT_PREFILL_KEY) || "null"); sessionStorage.removeItem(VARIANT_PREFILL_KEY); } catch { pending = null; }
+  if (manage && pending && Object.values(pending).some(Boolean)) {
+    variantDialog(product, null, reload, { ...pending, note: "Datos propuestos por el lector de etiquetas: revísalos antes de guardar." });
+  }
 }

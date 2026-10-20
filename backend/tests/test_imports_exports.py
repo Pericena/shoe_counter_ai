@@ -214,3 +214,50 @@ def test_pdf_reports(manager, variant):
     batch = upload(manager, csv_file(TRADE_ROWS), "p.csv").json
     manager.post(f"/api/imports/{batch['id']}/confirm", json={})
     assert manager.get("/api/reports/comercio.pdf").data.startswith(b"%PDF")
+
+
+def test_duplicate_policy_separate_operations(manager):
+    first = TRADE_ROWS[0]
+    second = first[:]
+    second[6], second[8], second[9] = 50, 50000, 5  # misma clave, otra operación (FICTICIA)
+    rejected = upload(manager, csv_file([first, second]), "dup_rechazar.csv").json
+    assert rejected["valid_rows"] == 0
+    data = {"kind": "comercio", "duplicate_policy": "separados", "file": (csv_file([first, second]), "dup_sep.csv")}
+    batch = manager.post("/api/imports", data=data, content_type="multipart/form-data").json
+    assert batch["valid_rows"] == 2 and batch["summary"]["duplicate_policy"] == "separados"
+    result = manager.post(f"/api/imports/{batch['id']}/confirm", json={}).json
+    assert result["added"] == 2
+    records = manager.get("/api/trade/records").json["items"]
+    assert sorted(r["occurrence"] for r in records) == [1, 2]
+    summary = manager.get("/api/trade/summary").json
+    assert summary["by_year_flow"][0]["value_usd"] == 150000  # se suman como operaciones distintas
+    bad = manager.post("/api/imports", data={"kind": "comercio", "duplicate_policy": "inventada",
+                                             "file": (csv_file([first]), "x.csv")}, content_type="multipart/form-data")
+    assert bad.status_code == 422
+
+
+def test_truncated_headers_are_explained(manager):
+    header = [h[:-1] if any(c in h for c in "íñóá") else h for h in TRADE_HEADER]  # simula el defecto real
+    batch = upload(manager, csv_file([TRADE_ROWS[0]], header=header), "truncado.csv").json
+    assert batch["valid_rows"] == 0
+    assert any("perdido su último carácter" in i["message"] for i in batch["issues"])
+
+
+def test_wrong_kind_suggests_correct_one(manager):
+    batch = upload(manager, csv_file(TRADE_ROWS), "comercio.csv", kind="catalogo").json
+    assert batch["valid_rows"] == 0
+    assert batch["summary"]["suggested_kind"] == "comercio"
+    assert "Comercio exterior" in batch["issues"][0]["message"]
+
+
+def test_auto_kind_detection(manager):
+    data = {"kind": "auto", "file": (csv_file(TRADE_ROWS), "auto.csv")}
+    batch = manager.post("/api/imports", data=data, content_type="multipart/form-data").json
+    assert batch["kind"] == "comercio" and batch["summary"]["kind_detected"] is True
+    header = [h[:-1] if any(c in h for c in "íñóá") else h for h in TRADE_HEADER]
+    truncated = manager.post("/api/imports", data={"kind": "catalogo", "file": (csv_file([TRADE_ROWS[0]], header=header), "t.csv")},
+                             content_type="multipart/form-data").json
+    assert truncated["summary"]["suggested_kind"] == "comercio"
+    unknown = manager.post("/api/imports", data={"kind": "auto", "file": (csv_file([["a", "b"]], header=["x", "y"]), "u.csv")},
+                           content_type="multipart/form-data")
+    assert unknown.status_code == 422

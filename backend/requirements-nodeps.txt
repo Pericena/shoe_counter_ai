@@ -1,0 +1,4 @@
+# Se instala con:  pip install --no-deps -r requirements-nodeps.txt
+# rapidocr-onnxruntime declara opencv-python (con GUI, necesita libGL); usamos opencv-python-headless,
+# que ya está en requirements.txt y provee el mismo módulo cv2. Sus demás dependencias están en requirements.txt.
+rapidocr-onnxruntime==1.4.4

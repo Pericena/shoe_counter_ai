@@ -42,7 +42,9 @@ def test_order_reserves_stock_and_lifecycle(manager, operator, anonymous, produc
     assert order["status"] == "creado"
     assert order["total_amount"] == "360.00"  # precio del servidor (180), no del cliente
     assert "customer_email" not in order  # respuesta pública sin datos personales
-    assert manager.get(f"/api/variants/{variant['id']}").json["stock_quantity"] == 1
+    # El pedido RESERVA: el físico sigue en 3, pero solo 1 está disponible para otra venta.
+    current = manager.get(f"/api/variants/{variant['id']}").json
+    assert (current["stock_quantity"], current["reserved_quantity"], current["available_quantity"]) == (3, 2, 1)
 
     lookup = anonymous.post("/api/shop/orders/lookup", json={"code": order["code"], "email": "cliente@ejemplo.test"})
     assert lookup.status_code == 200
@@ -55,6 +57,9 @@ def test_order_reserves_stock_and_lifecycle(manager, operator, anonymous, produc
                           ("enviado", {}), ("entregado", {})):
         response = operator.post(f"/api/orders/{order_id}/status", json={"status": status, **extra})
         assert response.status_code == 200, response.json
+        if status == "enviado":  # al enviar sale el físico y se consume la reserva
+            current = manager.get(f"/api/variants/{variant['id']}").json
+            assert (current["stock_quantity"], current["reserved_quantity"]) == (1, 0)
     returned = operator.post(f"/api/orders/{order_id}/status", json={"status": "devuelto", "note": "Talla incorrecta"})
     assert returned.status_code == 200
     assert manager.get(f"/api/variants/{variant['id']}").json["stock_quantity"] == 3
@@ -71,9 +76,11 @@ def test_cancel_restores_stock(manager, anonymous, product, variant):
     assert manager.post(f"/api/orders/{order_id}/status", json={"status": "cancelado"}).status_code == 422
     assert manager.post(f"/api/orders/{order_id}/status",
                         json={"status": "cancelado", "note": "Cliente desistió"}).status_code == 200
-    assert manager.get(f"/api/variants/{variant['id']}").json["stock_quantity"] == 1
+    current = manager.get(f"/api/variants/{variant['id']}").json
+    assert (current["stock_quantity"], current["reserved_quantity"]) == (1, 0)
     types = [m["movement_type"] for m in manager.get("/api/inventory/movements").json["items"]]
-    assert types[:2] == ["cancelacion_pedido", "salida_pedido"]
+    assert types[:2] == ["liberacion_reserva", "reserva"]
+    assert manager.get("/api/inventory/reconciliation").json["ok"] is True
 
 
 def test_last_unit_cannot_be_sold_twice(manager, anonymous, app, product, variant):
@@ -83,7 +90,7 @@ def test_last_unit_cannot_be_sold_twice(manager, anonymous, app, product, varian
     second = ApiClient(app).post("/api/shop/orders", json=order_payload(variant["id"]))
     assert first.status_code == 201
     assert second.status_code == 409
-    assert manager.get(f"/api/variants/{variant['id']}").json["stock_quantity"] == 0
+    assert manager.get(f"/api/variants/{variant['id']}").json["available_quantity"] == 0
     assert manager.get("/api/orders").json["total"] == 1  # el pedido fallido no queda a medias
 
 

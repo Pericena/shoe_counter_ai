@@ -66,7 +66,8 @@ class Config:
     # Detector de zapatos (ONNX). Carpeta con <versión>/model.onnx + metadata.json.
     AI_MODELS_DIR = Path(_env("AI_MODELS_DIR", str(BASE_DIR / "modelo" / "exportados")))
     AI_MODEL_VERSION = _env("AI_MODEL_VERSION")  # vacío = la versión más reciente disponible
-    AI_CONFIDENCE = float(_env("AI_CONFIDENCE", "0.35"))
+    # Vacío = usar "recommended_confidence" del metadata.json del modelo (elegido en validación); 0.35 si no hay.
+    AI_CONFIDENCE = float(_env("AI_CONFIDENCE")) if _env("AI_CONFIDENCE") else None
     AI_IOU = float(_env("AI_IOU", "0.5"))
 
     # Si hay un proxy HTTPS delante (Fase de despliegue), confiar en X-Forwarded-*.

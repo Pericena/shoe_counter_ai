@@ -14,20 +14,31 @@ from ..files.services import absolute_path, save_data_file
 from ..inventory.services import apply_movement, lock_variant
 from ..products.models import Brand, Category, Product, ProductVariant
 from .models import IMPORT_KINDS, ImportBatch, ImportIssue, TradeRecord
-from .parsers import TEMPLATES, VALIDATORS, read_table
+from .parsers import TEMPLATES, VALIDATORS, detect_kind, read_table
 
 bp = Blueprint("imports", __name__, url_prefix="/api/imports")
 
 
-def _validate(batch, path, sheet=None):
+DUPLICATE_POLICIES = ("rechazar", "separados")
+
+
+def _validate(batch, path, sheet=None, policy="rechazar"):
     try:
         frame, sheet_name, sheets = read_table(path, sheet)
     except ValueError as error:
         raise ApiError(str(error), 422)
     except Exception as error:  # noqa: BLE001 - pandas lanza tipos variados ante archivos dañados
         raise ApiError(f"No se pudo leer el archivo: {error}", 422)
-    rows, issues, info = VALIDATORS[batch.kind](frame).run()
+    rows, issues, info = VALIDATORS[batch.kind](frame, duplicate_policy=policy).run()
     info["sheets"] = sheets
+    if info["missing_columns"]:
+        # ¿Encaja con el otro tipo de importación? Ayuda cuando se eligió el tipo equivocado.
+        other = detect_kind(frame)
+        if other and other != batch.kind:
+            info["suggested_kind"] = other
+            label = {"catalogo": "Catálogo de la tienda", "comercio": "Comercio exterior de calzado"}[other]
+            issues.insert(0, (1, None, "error", f"Las columnas de este archivo corresponden a «{label}». "
+                                                "Vuelve a subirlo eligiendo ese tipo de datos."))
     return rows, issues, info, sheet_name
 
 
@@ -52,10 +63,24 @@ def template(kind):
 @bp.post("")
 @require("imports.manage")
 def upload():
-    kind = request.form.get("kind")
-    if kind not in IMPORT_KINDS:
-        raise ApiError("Datos no válidos.", 422, {"kind": "Elige 'catalogo' o 'comercio'."})
+    kind = request.form.get("kind") or "auto"
+    if kind not in (*IMPORT_KINDS, "auto"):
+        raise ApiError("Datos no válidos.", 422, {"kind": "Elige 'auto', 'catalogo' o 'comercio'."})
+    policy = request.form.get("duplicate_policy") or "rechazar"
+    if policy not in DUPLICATE_POLICIES:
+        raise ApiError("Datos no válidos.", 422, {"duplicate_policy": "Elige 'rechazar' o 'separados'."})
     stored = save_data_file(request.files.get("file"))
+    detected = None
+    if kind == "auto":
+        try:
+            frame, _, _ = read_table(absolute_path(stored), request.form.get("sheet"))
+        except Exception as error:  # noqa: BLE001
+            raise ApiError(f"No se pudo leer el archivo: {error}", 422)
+        detected = detect_kind(frame)
+        if detected is None:
+            raise ApiError("No se reconoce el tipo de archivo: sus columnas no coinciden con el catálogo ni con "
+                           "comercio exterior. Descarga una plantilla para ver las columnas esperadas.", 422)
+        kind = detected
     batch = ImportBatch(kind=kind, file_id=stored.id, user_id=g.user.id, status="validado")
     db.session.add(batch)
     db.session.flush()
@@ -65,7 +90,7 @@ def upload():
         .where(StoredFile.sha256 == stored.sha256, ImportBatch.kind == kind,
                ImportBatch.status == "confirmado", ImportBatch.id != batch.id)
     ).scalar()
-    rows, issues, info, sheet_name = _validate(batch, absolute_path(stored), request.form.get("sheet"))
+    rows, issues, info, sheet_name = _validate(batch, absolute_path(stored), request.form.get("sheet"), policy)
     if previous:
         issues.insert(0, (None, None, "error",
                           f"Este mismo archivo ya se importó y confirmó en el lote #{previous}."))
@@ -75,7 +100,7 @@ def upload():
     batch.valid_rows = len(rows)
     batch.rejected = len({i[0] for i in issues if i[2] == "error" and i[0] and i[0] > 1})
     batch.columns = info["mapping"]
-    batch.summary = {**info, "errors": sum(1 for i in issues if i[2] == "error"),
+    batch.summary = {**info, "duplicate_policy": policy, "kind_detected": detected is not None, "errors": sum(1 for i in issues if i[2] == "error"),
                      "warnings": sum(1 for i in issues if i[2] == "advertencia"),
                      "blocking": bool(previous) or bool(info["missing_columns"])}
     for row, column, severity, message in issues:
@@ -128,7 +153,8 @@ def confirm(batch_id):
     if (batch.summary or {}).get("blocking") or batch.valid_rows == 0:
         raise ApiError("No hay filas válidas para importar. Corrige el archivo y vuelve a subirlo.", 422)
     json_body()  # exige cuerpo JSON (y por tanto CSRF) explícito
-    rows, issues, _, _ = _validate(batch, absolute_path(batch.file), batch.sheet_name)
+    rows, issues, _, _ = _validate(batch, absolute_path(batch.file), batch.sheet_name,
+                                   (batch.summary or {}).get("duplicate_policy", "rechazar"))
     if len(rows) != batch.valid_rows:
         raise ApiError("El archivo cambió desde la validación. Súbelo de nuevo.", 409)
     counters = _apply_catalog(batch, rows) if batch.kind == "catalogo" else _apply_trade(batch, rows)
@@ -212,10 +238,12 @@ def _apply_trade(batch, rows):
     for r in rows:
         existing = db.session.execute(select(TradeRecord).where(
             TradeRecord.reporter == r["reporter"], TradeRecord.flow == r["flow"], TradeRecord.year == r["year"],
-            TradeRecord.hs6_code == r["hs6_code"], TradeRecord.partner == r["partner"])).scalar_one_or_none()
+            TradeRecord.hs6_code == r["hs6_code"], TradeRecord.partner == r["partner"],
+            TradeRecord.occurrence == r["occurrence"])).scalar_one_or_none()
         if existing is None:
             db.session.add(TradeRecord(source_batch_id=batch.id, reporter=r["reporter"], flow=r["flow"],
                                        year=r["year"], hs6_code=r["hs6_code"], partner=r["partner"],
+                                       occurrence=r["occurrence"],
                                        **{k: r[k] for k in TRADE_FIELDS}))
             added += 1
             continue

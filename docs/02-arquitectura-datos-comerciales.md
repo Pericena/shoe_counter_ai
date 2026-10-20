@@ -45,10 +45,12 @@ Números: `1.234,56`, `1,234.56`, `1234.5` y `12,5` se interpretan según la reg
 
 ### Clave e identificación de duplicados
 
-- **Clave natural**: `(reporter, flow, year, hs6_code, partner)`, con restricción `UNIQUE` en `trade_records`.
+- **Clave natural**: `(reporter, flow, year, hs6_code, partner, occurrence)`, con restricción `UNIQUE` en `trade_records`. Normalmente `occurrence = 1` (migración `9765b6bfd4c2`).
 - **Dentro del archivo**:
   - Filas con la misma clave y los **mismos** valores → se importa una y las demás se omiten con advertencia.
-  - Filas con la misma clave y valores **distintos** → todas se **rechazan** para revisión manual. No se elige una al azar.
+  - Filas con la misma clave y valores **distintos** dependen de la **política elegida al subir el archivo**:
+    - **«Rechazar para revisión»** (por defecto): todas se rechazan. No se elige una al azar.
+    - **«Conservar como operaciones separadas»**: se guardan todas, numeradas con `occurrence` = 1, 2… en el orden del archivo, con una advertencia por fila, y se **suman** en los indicadores. Elegirla solo si se sabe que son operaciones distintas.
 - **Frente a la base de datos**:
   - Misma clave y mismos valores → «sin cambios».
   - Valores distintos → «actualizada», y se registra el lote que la actualizó (`source_batch_id`).
@@ -57,6 +59,25 @@ Números: `1.234,56`, `1,234.56`, `1234.5` y `12,5` se interpretan según la reg
 ### Separación del inventario
 
 `trade_records` no tiene claves foráneas hacia productos ni stock. Ningún indicador de la tienda usa estos datos y la interfaz los presenta como **datos externos**.
+
+### Ayudas de validación
+
+- **Tipo automático**: la opción por defecto «Detectar automáticamente» elige el catálogo o el comercio exterior según las columnas (también si los encabezados llegaron truncados).
+
+- **Tipo equivocado**: si el archivo encaja con el otro tipo de importación (por ejemplo, un archivo de comercio subido como «Catálogo»), se indica cuál elegir.
+- **CSV con caracteres perdidos**: si los encabezados parecen haber perdido su último carácter (`País_reportant`, `Añ`, `Código_SA`…), se explica que el archivo se convirtió con una codificación errónea y se recomienda el `.xlsx` original o exportarlo de nuevo en UTF-8.
+
+### Archivo real `datos/ejemplos/MANACO-INTERMEDIO` (recibido el 2026-10-20)
+
+Validación de solo lectura, sin importar nada a ninguna base de datos:
+
+| Archivo | Resultado |
+|---|---|
+| `.xlsx` | 240 filas: España, Importación y Exportación, 2020–2024, SA6 640411, 640399 y 640420, 30 socios, sin agregados «Mundo», sin banderas de calidad. **10 claves aparecen dos veces con valores distintos** (20 filas). Con la política por defecto se importan 220 y esas 20 quedan para revisión; con «separados», 240 |
+| `.csv` | **Defectuoso**: los campos con tildes o «ñ» perdieron su último carácter (`España` → `Españ`, `Importación` → `Importació`, `Países Bajos` → `Países Bajo`). Se comprobó byte a byte que es UTF-8 válido con el último carácter perdido, no un simple problema de visualización; Excel además muestra «��» porque falta el BOM. La importación lo bloquea y lo explica |
+| `MANACO-INTERMEDIO_corregido.csv` | Generado a partir del `.xlsx` tras verificar que las 240 filas del `.csv` son el `.xlsx` truncado, con números idénticos. UTF-8 con BOM, `;` y coma decimal. Valida igual que el `.xlsx`: 220 + 20 repetidas |
+
+Decisión pendiente del usuario: si esas 10 claves repetidas son operaciones distintas (usa «separados») o un error del archivo (corrígelo e impórtalo con la política por defecto).
 
 ## 3. Catálogo de la tienda
 

@@ -7,7 +7,15 @@ python-dotenv==1.1.1
 # Imágenes e inferencia del detector (ONNX en CPU; sin PyTorch en el servidor)
 pillow==13.0.0
 numpy==2.5.4
+opencv-python-headless==5.0.0.93
 onnxruntime==1.31.0
+# Lector de etiquetas: códigos de barras/QR y OCR sin conexión (modelos ONNX incluidos en el paquete)
+zxing-cpp==3.1.1
+pyclipper==1.4.0
+shapely==2.2.0
+six==1.17.0
+PyYAML==6.0.3
+tqdm==4.70.1
 # Importación/exportación y reportes
 pandas==3.0.6
 openpyxl==3.1.5

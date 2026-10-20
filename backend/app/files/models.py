@@ -3,7 +3,7 @@ from sqlalchemy import CheckConstraint
 from ..common import iso, utcnow
 from ..extensions import db
 
-FILE_PURPOSES = ("producto", "conteo", "importacion")
+FILE_PURPOSES = ("producto", "conteo", "importacion", "etiqueta", "registro", "derivado")
 
 
 class StoredFile(db.Model):
@@ -25,6 +25,8 @@ class StoredFile(db.Model):
     width = db.Column(db.Integer)
     height = db.Column(db.Integer)
     uploaded_by = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"))
+    # Archivos derivados (recortes, miniaturas) apuntan a su imagen original.
+    parent_file_id = db.Column(db.Integer, db.ForeignKey("stored_files.id", ondelete="SET NULL"), index=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow)
 
     def to_dict(self):
@@ -36,5 +38,6 @@ class StoredFile(db.Model):
             "size_bytes": self.size_bytes,
             "width": self.width,
             "height": self.height,
+            "parent_file_id": self.parent_file_id,
             "created_at": iso(self.created_at),
         }

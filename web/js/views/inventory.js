@@ -102,6 +102,8 @@ export async function render(root, _params, { can }) {
       { label: "Estado", render: (v) => stockBadge(v.stock_state) },
       { label: "Precio", className: "num", render: (v) => fmt.money(v.price) },
       { label: "Valor costo", className: "num", render: (v) => fmt.money(v.inventory_value) },
+      { label: "Vendidos 30 d", className: "num", render: (v) => fmt.int(v.sold_recent ?? 0) },
+      { label: "Último mov.", render: (v) => v.last_movement_at ? fmt.date(v.last_movement_at) : "—" },
       { label: "", className: "num", render: (v) => el("span.actions", {},
         canMove ? el("button.btn.small.primary", { type: "button", on: { click: () => movementDialog(v, { can, onDone: () => table.reload(false) }) } }, "Movimiento") : null,
         el("a.btn.small", { href: `#/movimientos/${v.id}` }, "Historial")) },

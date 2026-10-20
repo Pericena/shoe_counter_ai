@@ -32,6 +32,9 @@ class AICount(db.Model):
     pairs_complete = db.Column(db.Integer)
     loose_shoes = db.Column(db.Integer)
     notes = db.Column(db.Text)
+    # Producto reconocido en la propia foto (código de barras/etiqueta) o elegido desde la cámara en vivo.
+    identified_variant_id = db.Column(db.Integer, db.ForeignKey("product_variants.id", ondelete="SET NULL"), index=True)
+    identification = db.Column(db.JSON)  # método, códigos leídos y candidatas
     confirmed_by = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"))
     confirmed_at = db.Column(db.DateTime(timezone=True))
     variant_id = db.Column(db.Integer, db.ForeignKey("product_variants.id", ondelete="SET NULL"), index=True)
@@ -46,7 +49,8 @@ class AICount(db.Model):
     user = db.relationship("User", foreign_keys=[user_id])
     confirmer = db.relationship("User", foreign_keys=[confirmed_by])
     applier = db.relationship("User", foreign_keys=[applied_by])
-    variant = db.relationship("ProductVariant")
+    variant = db.relationship("ProductVariant", foreign_keys=[variant_id])
+    identified_variant = db.relationship("ProductVariant", foreign_keys=[identified_variant_id])
     file = db.relationship("StoredFile")
 
     def to_dict(self, with_detections=True):
@@ -70,6 +74,9 @@ class AICount(db.Model):
             "pairs_complete": self.pairs_complete,
             "loose_shoes": self.loose_shoes,
             "notes": self.notes,
+            "identified_variant_id": self.identified_variant_id,
+            "identified_sku": self.identified_variant.sku if self.identified_variant else None,
+            "identification": self.identification,
             "confirmed_by": self.confirmer.username if self.confirmer else None,
             "confirmed_at": iso(self.confirmed_at),
             "variant_id": self.variant_id,
@@ -107,10 +114,12 @@ class AIDetection(db.Model):
     label = db.Column(db.String(50), nullable=False, default="zapato")
     source = db.Column(db.String(10), nullable=False, default="modelo")
     accepted = db.Column(db.Boolean, nullable=False, default=True)
+    # Producto asociado a esta caja (confirmado por la persona). Permite conteos de varios modelos en una foto.
+    variant_id = db.Column(db.Integer, db.ForeignKey("product_variants.id", ondelete="SET NULL"), index=True)
 
     count = db.relationship("AICount", back_populates="detections")
 
     def to_dict(self):
         return {"id": self.id, "x1": self.x1, "y1": self.y1, "x2": self.x2, "y2": self.y2,
                 "confidence": self.confidence, "label": self.label, "source": self.source,
-                "accepted": self.accepted}
+                "accepted": self.accepted, "variant_id": self.variant_id}

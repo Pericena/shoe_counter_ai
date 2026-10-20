@@ -89,8 +89,9 @@ class TableValidator:
 
     columns = {}   # nombre canónico -> (obligatoria, alias normalizados)
 
-    def __init__(self, frame):
+    def __init__(self, frame, duplicate_policy="rechazar"):
         self.frame = frame
+        self.duplicate_policy = duplicate_policy
         self.issues = []
         self.rows = []
         self.mapping = {}
@@ -111,7 +112,28 @@ class TableValidator:
         extra = [str(c) for c in self.frame.columns if c not in used]
         for name in missing:
             self.issue(1, name, "error", f"Falta la columna obligatoria '{name}'.")
+        truncated = [h for h in found for name in missing
+                     if any(len(alias) - len(h) == 1 and alias.startswith(h) for alias in (name, *self.columns[name][1]))]
+        if truncated:
+            self.issue(1, None, "error",
+                       "Algunos encabezados parecen haber perdido su último carácter (p. ej. "
+                       f"'{', '.join(str(found[h]) for h in truncated[:3])}'). Suele pasar al convertir el archivo con "
+                       "una codificación errónea: a los campos con tildes o ñ les falta la última letra. "
+                       "Usa el .xlsx original o vuelve a exportar el CSV en UTF-8.")
         return missing, extra
+
+    def diagnose(self):
+        """(faltantes, faltantes que parecen encabezados truncados) sin registrar incidencias."""
+        found = {normalize_header(c) for c in self.frame.columns}
+        missing, truncated = [], []
+        for name, (required, aliases) in self.columns.items():
+            names = (name, *aliases)
+            if not required or any(a in found for a in names):
+                continue
+            missing.append(name)
+            if any(len(a) - len(h) == 1 and a.startswith(h) for a in names for h in found):
+                truncated.append(name)
+        return missing, truncated
 
     def value(self, record, name):
         column = self.mapping.get(name)
@@ -273,7 +295,7 @@ class TradeValidator(TableValidator):
     }
 
     def validate_row(self, record, row):
-        clean = {"quality_flags": []}
+        clean = {"quality_flags": [], "occurrence": 1}
         reporter = self.value(record, "pais_reportante")
         partner = self.value(record, "socio_comercial")
         for name, value, limit in (("pais_reportante", reporter, 100), ("socio_comercial", partner, 150)):
@@ -373,14 +395,34 @@ class TradeValidator(TableValidator):
                     r["_omitted"] = True
             else:
                 numbers = ", ".join(str(r["_row"]) for r in rows)
+                if self.duplicate_policy == "separados":
+                    for occurrence, r in enumerate(rows, start=1):
+                        r["occurrence"] = occurrence
+                        self.issue(r["_row"], None, "advertencia",
+                                   f"Misma clave que las filas {numbers} con valores distintos: se conserva como "
+                                   f"operación separada (ocurrencia {occurrence}) por la política elegida.")
+                    keep.extend(rows)
+                    continue
                 for r in rows:
                     self.issue(r["_row"], None, "error",
                                f"Misma clave (reportante, flujo, año, SA6, socio) con valores distintos en las filas "
-                               f"{numbers}. Revisa cuál es correcta.")
+                               f"{numbers}. Revisa cuál es correcta o importa con la política «conservar como "
+                               "operaciones separadas» si son operaciones distintas.")
         self.rows = [r for r in self.rows if not r.get("_omitted")]
 
 
 VALIDATORS = {"catalogo": CatalogValidator, "comercio": TradeValidator}
+
+
+def detect_kind(frame):
+    """Elige el tipo cuyas columnas obligatorias encajan (contando encabezados truncados). None si ninguno."""
+    best, best_score = None, None
+    for kind, validator in VALIDATORS.items():
+        missing, truncated = validator(frame).diagnose()
+        score = len(missing) - len(truncated)  # un encabezado truncado reconocible cuenta como presente
+        if best_score is None or score < best_score:
+            best, best_score = kind, score
+    return best if best_score == 0 else None
 
 TEMPLATES = {
     "catalogo": list(CatalogValidator.columns),

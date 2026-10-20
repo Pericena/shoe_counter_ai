@@ -42,6 +42,9 @@ class Order(db.Model):
     notes = db.Column(db.Text)
     total_amount = db.Column(db.Numeric(12, 2), nullable=False)
     payment_reference = db.Column(db.String(100))  # registrada a mano por el personal; no hay cobro en línea
+    # "reserva": reserva al crear y descuenta al enviar. "descuento": pedidos antiguos que descontaban al crearse.
+    stock_mode = db.Column(db.String(10), nullable=False, default="reserva", server_default="descuento")
+    location_id = db.Column(db.Integer, db.ForeignKey("locations.id", ondelete="RESTRICT"))
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow, index=True)
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow)
 
@@ -70,6 +73,7 @@ class Order(db.Model):
                 "notes": self.notes,
                 "payment_reference": self.payment_reference,
                 "allowed_transitions": sorted(ORDER_TRANSITIONS[self.status]),
+                "stock_mode": self.stock_mode,
             })
         return data
 
@@ -93,13 +97,16 @@ class OrderItem(db.Model):
     quantity = db.Column(db.Integer, nullable=False)
     unit_price = db.Column(db.Numeric(12, 2), nullable=False)
     line_total = db.Column(db.Numeric(12, 2), nullable=False)
+    # Costo de la variante al crear el pedido (margen histórico correcto aunque el costo cambie).
+    unit_cost = db.Column(db.Numeric(12, 2))
 
     order = db.relationship("Order", back_populates="items")
 
     def to_dict(self):
         return {"variant_id": self.variant_id, "sku": self.sku, "description": self.description,
                 "size": self.size, "color": self.color, "quantity": self.quantity,
-                "unit_price": str(self.unit_price), "line_total": str(self.line_total)}
+                "unit_price": str(self.unit_price), "line_total": str(self.line_total),
+                "unit_cost": str(self.unit_cost) if self.unit_cost is not None else None}
 
 
 class OrderStatusHistory(db.Model):

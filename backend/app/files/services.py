@@ -17,7 +17,8 @@ IMAGE_FORMATS = {"JPEG", "PNG", "WEBP"}
 DATA_EXTENSIONS = {".csv", ".xlsx"}
 MAX_IMAGE_SIDE = 4096
 MAX_IMAGE_PIXELS = 50_000_000
-SUBDIRS = {"producto": "fotos", "conteo": "procesadas", "importacion": "importaciones"}
+SUBDIRS = {"producto": "fotos", "conteo": "procesadas", "importacion": "importaciones", "etiqueta": "etiquetas",
+           "registro": "registro", "derivado": "derivados"}
 
 Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS  # protege contra "bombas" de descompresión
 
@@ -73,6 +74,19 @@ def save_image(file_storage, purpose):
     relative, absolute = _target(purpose, ".jpg")
     absolute.write_bytes(data)
     return _register(purpose, original, relative, "image/jpeg", data, image.width, image.height)
+
+
+def save_derived(parent, pil_image, kind="recorte"):
+    """Guarda una imagen derivada (recorte/miniatura) relacionada con su original."""
+    buffer = io.BytesIO()
+    pil_image.convert("RGB").save(buffer, "JPEG", quality=90)
+    data = buffer.getvalue()
+    relative, absolute = _target("derivado", ".jpg")
+    absolute.write_bytes(data)
+    row = _register("derivado", f"{kind}_{parent.original_name}"[:255], relative, "image/jpeg", data,
+                    pil_image.width, pil_image.height)
+    row.parent_file_id = parent.id
+    return row
 
 
 def save_data_file(file_storage):

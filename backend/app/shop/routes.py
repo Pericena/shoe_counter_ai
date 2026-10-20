@@ -13,7 +13,9 @@ from ..audit.services import audit, client_ip
 from ..auth.services import check_rate, require
 from ..common import ApiError, Validator, json_body, parse_date_range, query_int
 from ..extensions import db
-from ..inventory.services import apply_movement, lock_variant
+from ..inventory.models import Location, StockLevel
+from ..inventory.services import apply_movement, default_location, lock_variant
+from ..inventory.settings import get_setting
 from ..products.models import Brand, Category, Product, ProductVariant
 from .models import ORDER_STATUSES, ORDER_TRANSITIONS, Order, OrderItem, OrderStatusHistory
 
@@ -23,13 +25,20 @@ MAX_QTY_PER_LINE = 10
 CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
 
+def location_available(variant, location):
+    level = db.session.get(StockLevel, (variant.id, location.id))
+    return level.available if level else 0
+
+
 def _sellable(variant):
     return (variant.status == "activo" and variant.price is not None
             and variant.product.status == "activo" and variant.product.is_published)
 
 
-def _public_product(product):
+def _public_product(product, location=None):
+    location = location or default_location()
     variants = [v for v in product.variants if _sellable(v)]
+    stock = {v.id: location_available(v, location) for v in variants}
     return {
         "id": product.id,
         "code": product.code,
@@ -40,9 +49,9 @@ def _public_product(product):
         "description": product.description,
         "images": [i.to_dict() for i in product.images],
         "variants": [{"id": v.id, "size": v.size, "color": v.color, "price": str(v.price),
-                      "available": v.stock_quantity > 0,
+                      "available": stock[v.id] > 0,
                       # Se muestra la cantidad solo si es baja, para no exponer el inventario completo.
-                      "low_stock": 0 < v.stock_quantity <= 3} for v in variants],
+                      "low_stock": 0 < stock[v.id] <= 3} for v in variants],
         "price_from": str(min(v.price for v in variants)) if variants else None,
     }
 
@@ -145,7 +154,10 @@ def create_order():
         raise ApiError("Datos no válidos.", 422, {"customer_email": "Correo no válido."})
     lines = _parse_lines(data.get("items"))
 
-    order = Order(code=_order_code(), status="creado", customer_name=clean["customer_name"],
+    reserve = bool(get_setting("reserve_on_order"))
+    location = default_location()
+    order = Order(code=_order_code(), status="creado", stock_mode="reserva" if reserve else "descuento",
+                  location_id=location.id, customer_name=clean["customer_name"],
                   customer_email=email, customer_phone=clean.get("customer_phone"),
                   shipping_address=clean.get("shipping_address"), notes=clean.get("notes"),
                   total_amount=Decimal("0"))
@@ -160,8 +172,9 @@ def create_order():
             continue
         variant = lock_variant(variant_id)
         quantity = lines[variant_id]
-        if variant.stock_quantity < quantity:
-            problems[str(variant_id)] = f"Solo quedan {variant.stock_quantity} pares de {variant.sku}."
+        available = location_available(variant, location)
+        if available < quantity:
+            problems[str(variant_id)] = f"Solo quedan {available} pares disponibles de {variant.sku}."
             continue
         line_total = variant.price * quantity
         total += line_total
@@ -169,9 +182,14 @@ def create_order():
             variant_id=variant.id, sku=variant.sku,
             description=f"{variant.product.brand.name} {variant.product.model_name}",
             size=variant.size, color=variant.color, quantity=quantity,
-            unit_price=variant.price, line_total=line_total))
-        apply_movement(variant, "salida_pedido", -quantity, reason="Reserva por pedido online",
-                       reference=order.code, order_id=order.id)
+            unit_price=variant.price, line_total=line_total, unit_cost=variant.cost))
+        if reserve:
+            apply_movement(variant, "reserva", 0, reserved_delta=quantity, location=location, channel="online",
+                           reason="Reserva por pedido online", reference=order.code, order_id=order.id,
+                           external_ref=f"{order.code}:reserva:{variant.id}")
+        else:
+            apply_movement(variant, "salida_pedido", -quantity, location=location, channel="online",
+                           reason="Pedido online (sin reserva)", reference=order.code, order_id=order.id)
     if problems:
         db.session.rollback()
         raise ApiError("Algunos productos del carrito no tienen stock suficiente.", 409, problems)
@@ -254,14 +272,30 @@ def change_order_status(order_id):
             raise ApiError("Datos no válidos.", 422,
                            {"payment_reference": "Indica la referencia del pago recibido (transferencia, recibo…)."})
         order.payment_reference = reference
-    if new_status in ("cancelado", "devuelto"):
-        if not note:
-            raise ApiError("Datos no válidos.", 422, {"note": "Indica el motivo."})
-        movement_type = "cancelacion_pedido" if new_status == "cancelado" else "devolucion_cliente"
-        for item in sorted(order.items, key=lambda i: i.variant_id):
-            variant = lock_variant(item.variant_id)
-            apply_movement(variant, movement_type, item.quantity, reason=f"Pedido {order.code}: {note}",
-                           reference=order.code, order_id=order.id)
+    if new_status in ("cancelado", "devuelto") and not note:
+        raise ApiError("Datos no válidos.", 422, {"note": "Indica el motivo."})
+    condition = data.get("condition", "reintegrable")
+    if new_status == "devuelto" and condition not in ("reintegrable", "danado"):
+        raise ApiError("Datos no válidos.", 422, {"condition": "Elige 'reintegrable' o 'danado' tras inspeccionar."})
+    location = db.session.get(Location, order.location_id) if order.location_id else default_location()
+    for item in sorted(order.items, key=lambda i: i.variant_id):
+        variant = lock_variant(item.variant_id)
+        common = {"location": location, "channel": "online", "reference": order.code, "order_id": order.id,
+                  "reason": f"Pedido {order.code}" + (f": {note}" if note else "")}
+        if order.stock_mode == "reserva":
+            if new_status == "cancelado":  # antes del envío: se libera la reserva
+                apply_movement(variant, "liberacion_reserva", 0, reserved_delta=-item.quantity,
+                               external_ref=f"{order.code}:liberacion:{variant.id}", **common)
+            elif new_status == "enviado":  # sale el físico y se consume la reserva
+                apply_movement(variant, "salida_pedido", -item.quantity, reserved_delta=-item.quantity,
+                               external_ref=f"{order.code}:salida:{variant.id}", **common)
+        elif new_status == "cancelado":  # pedidos antiguos que descontaban al crearse
+            apply_movement(variant, "cancelacion_pedido", item.quantity, **common)
+        if new_status == "devuelto" and condition == "reintegrable":
+            apply_movement(variant, "devolucion_cliente", item.quantity,
+                           external_ref=f"{order.code}:devolucion:{variant.id}", **common)
+    if new_status == "devuelto":
+        note = f"{note} · inspección: {'reintegrado al stock' if condition == 'reintegrable' else 'dañado, no vuelve al stock'}"
     order.history.append(OrderStatusHistory(from_status=order.status, to_status=new_status,
                                             user_id=g.user.id, note=note))
     audit("pedido_estado", "order", order.id, {"code": order.code, "de": order.status, "a": new_status})

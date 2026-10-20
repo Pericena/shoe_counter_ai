@@ -13,13 +13,18 @@ function batchView(batch, onChange) {
   const warnings = (batch.issues || []).filter((i) => i.severity === "advertencia");
   const card = el("div.card", {}, el("h2", {}, `Importación #${batch.id} · ${batch.file_name}`),
     el("p", {}, badge(batch.status === "confirmado" ? "good" : batch.status === "descartado" ? "" : "info", batch.status), " ",
-      el("span.small.muted", {}, `${KINDS[batch.kind].label} · ${batch.sheet_name ? "hoja «" + batch.sheet_name + "» · " : ""}${fmt.datetime(batch.created_at)} · ${batch.user}`)));
+      el("span.small.muted", {}, `${KINDS[batch.kind].label}${s.kind_detected ? " (detectado automáticamente)" : ""}${s.duplicate_policy === "separados" ? " · repetidas como operaciones separadas" : ""} · ${batch.sheet_name ? "hoja «" + batch.sheet_name + "» · " : ""}${fmt.datetime(batch.created_at)} · ${batch.user}`)));
   card.append(el("div.kpis", {},
     ...[["Filas leídas", batch.total_rows], ["Válidas", batch.valid_rows], ["Rechazadas", batch.rejected],
       ["Errores", s.errors ?? errors.length], ["Advertencias", s.warnings ?? warnings.length],
       ...(batch.status === "confirmado" ? [["Añadidas", batch.added], ["Actualizadas", batch.updated], ["Sin cambios", batch.skipped]] : [])]
       .map(([label, value]) => el("div.kpi", {}, el("div.label", {}, label), el("div.value", {}, fmt.int(value))))));
-  if (s.missing_columns?.length) card.append(el("div.alert.bad", {}, `Faltan columnas obligatorias: ${s.missing_columns.join(", ")}.`));
+  if (s.suggested_kind) {
+    card.append(el("div.alert.warn", {}, el("strong", {}, "Tipo de datos equivocado. "),
+      `Este archivo tiene las columnas de «${KINDS[s.suggested_kind].label}». Súbelo de nuevo eligiendo ese tipo.`));
+  } else if (s.missing_columns?.length) {
+    card.append(el("div.alert.bad", {}, `Faltan columnas obligatorias: ${s.missing_columns.join(", ")}.`));
+  }
   if (s.mapping) {
     card.append(el("details", {}, el("summary", {}, "Columnas detectadas"),
       el("p.small", {}, "Asignadas: ", Object.entries(s.mapping).map(([k, v]) => `${v} → ${k}`).join(" · ")),
@@ -66,9 +71,19 @@ function batchView(batch, onChange) {
 
 export async function render(root, params) {
   const result = el("div.stack");
-  const kind = el("select", {}, Object.entries(KINDS).map(([id, k]) => new Option(k.label, id)));
-  const help = el("p.small.muted", {}, KINDS.catalogo.help);
-  kind.addEventListener("change", () => { help.textContent = KINDS[kind.value].help; });
+  const kind = el("select", {}, new Option("Detectar automáticamente (recomendado)", "auto"),
+    Object.entries(KINDS).map(([id, k]) => new Option(k.label, id)));
+  const AUTO_HELP = "El sistema reconoce por las columnas si es un catálogo de la tienda o datos de comercio exterior.";
+  const help = el("p.small.muted", {}, AUTO_HELP);
+  const policy = el("select", {},
+    new Option("Rechazar para revisión (recomendado)", "rechazar"),
+    new Option("Conservar como operaciones separadas (se suman)", "separados"));
+  const policyField = el("label.field", {}, "Filas con la misma clave y valores distintos", policy,
+    el("span.small.muted", {}, "Clave: reportante + flujo + año + SA6 + socio. Elige «separados» solo si sabes que son operaciones distintas."));
+  kind.addEventListener("change", () => {
+    help.textContent = kind.value === "auto" ? AUTO_HELP : KINDS[kind.value].help;
+    policyField.classList.toggle("hidden", kind.value === "catalogo");
+  });
   const file = el("input", { type: "file", accept: ".xlsx,.csv", required: true });
   const sheet = el("input", { placeholder: "Hoja (opcional; por defecto la primera)", maxlength: 100 });
   const button = el("button.btn.primary", { type: "submit" }, icon("upload"), "Validar archivo");
@@ -80,6 +95,7 @@ export async function render(root, params) {
         const data = new FormData();
         data.append("kind", kind.value);
         data.append("file", file.files[0]);
+        if (kind.value !== "catalogo") data.append("duplicate_policy", policy.value);
         if (sheet.value.trim()) data.append("sheet", sheet.value.trim());
         button.disabled = true;
         result.replaceChildren(el("div.loading", {}, el("span.spinner"), " Leyendo y validando…"));
@@ -92,9 +108,9 @@ export async function render(root, params) {
     },
   }, el("h2", {}, "1. Subir y validar"),
   el("p.small.muted", {}, "Nada se guarda hasta que confirmes. Formatos: .xlsx (sin macros) o .csv (separador coma, punto y coma o tabulador; UTF-8 o Latin-1)."),
-  el("div.form.two", {}, el("label.field", {}, "Tipo de datos", kind, help), el("label.field", {}, "Archivo", file, sheet)),
+  el("div.form.two", {}, el("label.field", {}, "Tipo de datos", kind, help), el("label.field", {}, "Archivo", file, sheet), policyField),
   el("div.actions", {}, button,
-    el("button.btn", { type: "button", on: { click: () => download(`/api/imports/templates/${kind.value}.csv`).catch(showError) } }, icon("download"), "Descargar plantilla")));
+    el("button.btn", { type: "button", on: { click: () => download(`/api/imports/templates/${kind.value === "auto" ? "comercio" : kind.value}.csv`).catch(showError) } }, icon("download"), "Descargar plantilla")));
 
   function show(batch) {
     result.replaceChildren(batchView(batch, (updated) => { show(updated); history.reload(false); }));

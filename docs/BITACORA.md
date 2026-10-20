@@ -9,6 +9,7 @@ Registro cronológico de todo lo que se hace en el proyecto. Cada entrada indica
 | [02-arquitectura-datos-comerciales.md](02-arquitectura-datos-comerciales.md) | Importación Excel/CSV, diccionario de datos y política de duplicados |
 | [03-autenticacion-seguridad.md](03-autenticacion-seguridad.md) | Login, roles, permisos, auditoría y seguridad |
 | [04-ia-detector.md](04-ia-detector.md) | Datasets, entrenamiento, métricas, exportación y conteo inteligente |
+| [05-camara-ocr.md](05-camara-ocr.md) | Cámara en vivo y lector de etiquetas (OCR) |
 | [06-bi-reportes.md](06-bi-reportes.md) | Fórmulas de indicadores, BI y exportaciones |
 | [07-tienda-online.md](07-tienda-online.md) | Tienda, pedidos y pagos pendientes |
 | [08-pruebas.md](08-pruebas.md) | Pruebas automatizadas y verificaciones manuales |
@@ -176,3 +177,152 @@ Login → 12 secciones sin errores → marca, categoría, producto y variante �
   - Informe en `entrenamiento/informes/kaggle_shoedataset/`.
 - **Open Images V7**: calzado de las particiones validación y test, con cajas verificadas. 7.877 candidatas tras los filtros (sin cajas de grupo, sin dibujos, sin patines, sin rotación, ≤ 30 cajas) → 3.000 descargadas, con atribución en `attribution.csv`.
 - **Particiones** (semilla 42, grupos de pHash ≤ 6 indivisibles): train 2.400 (10.216 cajas), val 300 (1.298), test 300 (1.355), test_externo Kaggle 137 (300). Validación OK y revisión visual de muestras.
+
+### Entrenamiento y evaluación del detector (resultados reales)
+
+- **Entrenamiento** `shoe-det-v001`: YOLO11s, 60 épocas completas, ~4 h 30 min en la RTX 3050, `workers: 0`. Evolución de mAP50 en val: 0,216 (época 1) → 0,502 (10) → 0,574 (20) → 0,628 (35) → 0,660 (47) → 0,663 (59).
+- **Mejor checkpoint**: época 59 según la *fitness* de Ultralytics (0,9·mAP50-95 + 0,1·mAP50). `best.pt` es ese checkpoint, no el de la última época. No se repitió el entrenamiento.
+- **Evaluación** del `.pt` y del **ONNX desplegado** en val, test y test externo (Kaggle), con el umbral elegido solo en val. Tablas completas en [04-ia-detector.md](04-ia-detector.md) §4. Métricas oficiales (ONNX):
+
+  | Conjunto | P | R | mAP50 | mAP50-95 | MAE de conteo | Exactas |
+  |---|---|---|---|---|---|---|
+  | test | 0,767 | 0,619 | 0,687 | 0,379 | 1,23 | 40,0 % |
+  | test externo | 0,853 | 0,747 | 0,823 | 0,556 | 0,56 | 56,9 % |
+
+- **Falsos positivos y negativos** (galerías `peores_*.jpg`):
+  - FN en multitudes con zapatos diminutos.
+  - FP en patas de perro, objetos y dibujos.
+  - Errores de localización que incluyen la pierna.
+  - **Una fila de 10 zapatos expuestos con solo 4 detectados**: el escenario de tienda no está bien cubierto.
+- **Independencia del test externo**: 0 casi duplicados con Open Images, otra fuente y el mismo objetivo (una caja por zapato). Tiene ruido de anotación y marcas de agua de bancos de imágenes.
+- **Exportación** versionada: `modelo/pesos/shoe-det-v001/best.pt` y `modelo/exportados/shoe-det-v001/model.onnx` + `metadata.json`.
+
+### Defecto encontrado: paridad ONNX del backend
+
+- La comprobación de exportación dio 26/40 conteos iguales.
+- El diagnóstico atribuyó la causa al preprocesado con PIL del backend: 32/40 frente al ONNX de Ultralytics, mientras que con un letterbox OpenCV idéntico daba 40/40.
+- Corrección: `postprocess.letterbox` replica a Ultralytics (dependencia nueva `opencv-python-headless==5.0.0.93` en el backend), y `exportar.py` ahora aborta si no hay paridad.
+- Nuevo `scripts/verificar_onnx.py`: **60/60 en test y 60/60 en test externo**. Fija en `metadata.json` las métricas del ONNX y el umbral recomendado de 0,20.
+- La app usa ese umbral salvo que `AI_CONFIDENCE` lo fije.
+
+### Integración real del detector
+
+- **Servidor local**: 3 fotos de test subidas por HTTP → modelo `shoe-det-v001` con 2, 3 y 5 detecciones y sus confianzas, ~0,6 s por foto en CPU. La vista de revisión muestra las cajas alineadas. Un falso positivo (40 %) solapado sirvió para comprobar el rechazo.
+- **Contenedor Docker**: detección con el modelo montado en solo lectura, umbral 0,20 tomado del modelo, 5 detecciones en 308 ms.
+
+### Otros cambios de este bloque
+
+- **Fotos de producto**: subida en el formulario de creación y edición (varias, con vista previa) y botón rápido «Foto» en la lista. Además de la subida que ya había en el detalle.
+- **Archivo real MANACO-INTERMEDIO** (en `datos/ejemplos/`; no se modificó ni se importó):
+  - El `.xlsx` es válido: 240 filas, de las que 10 claves aparecen 2 veces con valores distintos.
+  - El `.csv` está **corrupto**: perdió la última letra de los campos con tildes.
+  - Se añadió la política de duplicados «rechazar» / «separados» (migración `9765b6bfd4c2`, columna `occurrence`), la detección del CSV truncado y la sugerencia del tipo de importación correcto. Durante la sesión el usuario subió el archivo como «Catálogo» y obtuvo 0 filas válidas; ahora se le indica que es «Comercio exterior».
+- **Robustez**: si el modelo falla durante la inferencia, el conteo pasa a modo manual con aviso, sin dar un error 500.
+- **Limpieza**: carpetas `runs/` y `weights/` que Ultralytics creó en la raíz (configuración apuntada a `entrenamiento/`), `install_torch.log`, el logo de robot y los favicons de Patitas.
+
+### Pruebas ejecutadas al cierre
+
+| Entorno | Resultado |
+|---|---|
+| SQLite (`pytest`) | **107 aprobadas, 2 omitidas** (las de concurrencia, que exigen PostgreSQL). pyflakes sin avisos salvo las importaciones intencionadas de modelos |
+| PostgreSQL 16 real (contenedor, base `shoe_counter_test`) | **109 aprobadas, 0 omitidas**, incluidas 2 de concurrencia (6 compradores por 1 unidad → 1 aceptado y 5 rechazados) |
+| Docker | Imagen reconstruida; migraciones 1→3 aplicadas en PostgreSQL; `app` y `db` *healthy*; `/api/health` OK |
+| Persistencia | Tras `docker compose down` + `up` se conservan la revisión del esquema, los roles y las bases. Volumen `shoe_counter_ai_pgdata` |
+| Copia de seguridad documentada | `pg_dump -Fc` y `pg_restore` en una base temporal: esquema y 42 permisos restaurados. Base temporal y volcado borrados después |
+| Verificación manual en navegador | Fotos de producto (formulario y lista), revisión de un conteo con el modelo real, BI y tienda (ver entrada anterior) |
+
+**No probado o pendiente**:
+
+- Rendimiento del detector con **fotos reales de la tienda**: no hay ninguna.
+- Envío real de correo SMTP: no hay servidor configurado.
+- Pasarela de pagos: no se integró a propósito.
+- Revisión visual a pantalla completa: el panel del navegador era pequeño.
+
+**Estado de la base de desarrollo** (`storage/dev.sqlite3`): contiene datos marcados PRUEBA de mis verificaciones y las acciones que hizo el usuario durante la sesión (conteo #9, importación #2). No se borró para no perder lo del usuario. Para empezar de cero: detén el servidor, borra `storage/dev.sqlite3`, ejecuta `flask --app run db upgrade` y crea el administrador.
+
+**Docker**: los contenedores quedaron detenidos (`docker compose stop`) para liberar RAM. La base PostgreSQL principal solo contiene el esquema, sin usuarios: el primer administrador se crea con `users create-admin`.
+
+
+---
+
+## 2026-10-20 (noche) — CSV de Manaco, cámara en vivo y lector de etiquetas (OCR)
+
+**Petición del usuario**: el CSV de Manaco se veía con «��» y daba «faltan columnas»; quiere activar la cámara para el conteo y el inventario, que se vaya registrando la imagen, y usar OCR (por ejemplo, para la marca).
+
+### CSV de Manaco
+
+- **Diagnóstico con bytes reales**: el `.csv` es UTF-8 válido, pero cada campo con tildes o ñ **perdió su último carácter** (pérdida de datos real). Además no tiene BOM, por eso Excel muestra «��». El error «faltan codigo_producto, marca…» salió porque se subió con el tipo «Catálogo».
+- Se verificó que el `.csv` es exactamente el `.xlsx` truncado (240 filas, números iguales) y se generó **`MANACO-INTERMEDIO_corregido.csv`** a partir del `.xlsx`: UTF-8 con BOM, `;` y coma decimal. Valida igual que el `.xlsx`. Los originales no se tocaron.
+- **Importación con «Detectar automáticamente»** (nueva opción por defecto): reconoce el tipo por las columnas, incluso con encabezados truncados.
+
+### Cámara en vivo (Conteo inteligente)
+
+- `POST /api/ai/detect`: detección sobre un fotograma **sin guardarlo**.
+- La interfaz dibuja las cajas y el conteo sobre el vídeo (unos 140–200 ms por fotograma en local).
+- «Registrar foto y contar» guarda la foto como conteo pendiente de revisión, así que el stock no cambia sin confirmación.
+- `web/js/camera.js` se comparte con el lector de etiquetas.
+
+### Lector de etiquetas (nuevo menú)
+
+- `POST /api/ocr/analyze`: `zxing-cpp` lee los códigos de barras y QR, y `rapidocr-onnxruntime` (modelos incluidos, sin Internet) el texto.
+- Propone marca (solo si está escrita y registrada), talla, color, precio y SKU, y busca la variante.
+- Acciones disponibles: registrar un movimiento, o crear el producto o la variante **prellenados**.
+- La imagen se guarda en privado (`storage/etiquetas/`, migración `e865ca134acc`) y la lectura queda en la auditoría.
+- **Límite**: no reconoce logotipos (ver [05-camara-ocr.md](05-camara-ocr.md)).
+
+### Defectos encontrados
+
+- **OCR**: lee «4O» por «40» y une palabras («TALLA4ONEGRO»). Se toleran las confusiones solo cuando no hay ambigüedad; si la hay, no se propone talla.
+- **Caracteres de control**: al editar con scripts se colaron caracteres invisibles (``, ``) en dos archivos. Se corrigieron y se escaneó todo el repositorio sin encontrar más.
+
+### Dependencias nuevas
+
+- En `requirements.txt`: `zxing-cpp==3.1.1`, `pyclipper`, `shapely`, `six`, `PyYAML`, `tqdm`.
+- `rapidocr-onnxruntime==1.4.4` va en `requirements-nodeps.txt` y se instala con `--no-deps`, porque pediría el OpenCV con interfaz gráfica, que en Docker necesita libGL. El módulo `cv2` lo aporta `opencv-python-headless`.
+
+### Pruebas
+
+| Entorno | Resultado |
+|---|---|
+| SQLite | **113 aprobadas, 2 omitidas** (concurrencia, solo PostgreSQL) |
+| PostgreSQL 16 en Docker (imagen reconstruida, migración 4 aplicada) | **115 aprobadas, 0 omitidas**, incluidas las de OCR y códigos de barras en Linux |
+| Servidor local (HTTP real) | Vivo: 5 zapatos en 144 ms, 0 conteos guardados. Etiqueta: EAN 7790000000010, talla 40, Negro, 180.00 |
+| UI | Las pantallas «Lector de etiquetas» y «Cámara en vivo» cargan sin errores |
+
+**No probado**: la cámara física del dispositivo (requiere conceder el permiso en el navegador del usuario).
+
+
+---
+
+## 2026-10-20 (noche, 2) — Producto reconocido: ficha completa y datos relacionados
+
+**Petición**: si el producto ya está registrado, que al detectarlo (OCR, cámara o foto) se vean su modelo, su marca y todas sus características junto con la cantidad, y que los datos del inventario estén bien relacionados.
+
+**Hecho**:
+
+- **Ficha consolidada** (`app/products/services.py::product_card`, `GET /api/products/<id>/overview`):
+  - identidad y características;
+  - totales (pares, valor a costo y a precio, vendidos en 30 días, reservados por pedidos abiertos, bajas y agotadas);
+  - matriz talla × color con stock y variante reconocida;
+  - últimos movimientos y conteos.
+- **Lector de etiquetas**: devuelve y muestra la ficha de cada producto reconocido.
+- **Conteo**:
+  - identificación automática por el código o la etiqueta de la **misma foto**;
+  - selección desde la cámara en vivo («Identificar producto» con una franja sobre el vídeo);
+  - corrección manual.
+  - Se guarda en `ai_counts.identified_variant_id` + `identification` (migración `090f29bf83c0`).
+  - La revisión muestra «Foto frente a inventario» y la ficha; la conciliación preselecciona la variante identificada.
+- **Existencias**: columnas «Vendidos 30 d» y «Último mov.». El detalle del producto incluye la ficha, los movimientos y los conteos.
+- **Interfaz**: plurales correctos («1 par», «2 pares»).
+
+**Pruebas**:
+
+| Prueba | Resultado |
+|---|---|
+| `test_identification.py` (4 pruebas nuevas) | Aprobadas |
+| SQLite | **117 aprobadas, 2 omitidas** (concurrencia) |
+| PostgreSQL en Docker (migración 5 aplicada) | **119 aprobadas** |
+| Servidor real | Una foto con EAN identificó `PRUEBA-UI-1-40-N` y mostró su ficha y la comparación |
+| Interfaz (DOM) | Conteo, producto y Existencias sin errores |
+
+**Aviso**: el panel del navegador integrado de Claude **bloquea la cámara**. Para usarla, abre `http://localhost:8088` en Chrome o Edge.

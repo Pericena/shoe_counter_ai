@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 from flask import current_app
 
-from .postprocess import decode_output, nms
+from .postprocess import decode_output, letterbox, nms
 
 _lock = threading.Lock()
 _cache = {}
@@ -57,18 +57,35 @@ def model_status():
         "versions": [m.get("version") for _, m in versions],
         "requested_version": wanted,
         "confidence_threshold": cfg["AI_CONFIDENCE"],
+        "confidence_source": "AI_CONFIDENCE" if cfg["AI_CONFIDENCE"] is not None else "modelo",
         "iou_threshold": cfg["AI_IOU"],
         "runtime": "onnxruntime (CPU)",
     }
     if chosen:
         folder, meta = chosen
         status.update({"version": meta.get("version"), "metadata": meta, "path": folder.name})
+        if cfg["AI_CONFIDENCE"] is None:
+            status["confidence_threshold"] = confidence_for(meta)
     elif wanted:
         status["message"] = f"La versión '{wanted}' indicada en AI_MODEL_VERSION no está instalada."
     else:
         status["message"] = ("No hay ningún modelo instalado. Entrena y exporta uno con los scripts de "
                              "entrenamiento/ (ver docs/04-ia-detector.md).")
     return status, chosen
+
+
+DEFAULT_CONFIDENCE = 0.35
+
+
+def confidence_for(meta):
+    """Umbral efectivo: AI_CONFIDENCE si está fijado; si no, el recomendado por la evaluación del modelo."""
+    configured = current_app.config.get("AI_CONFIDENCE")
+    if configured is not None:
+        return configured
+    try:
+        return float(meta.get("recommended_confidence", DEFAULT_CONFIDENCE))
+    except (TypeError, ValueError):
+        return DEFAULT_CONFIDENCE
 
 
 class Detector:
@@ -86,24 +103,10 @@ class Detector:
                                             providers=["CPUExecutionProvider"])
         self.input_name = self.session.get_inputs()[0].name
 
-    def _letterbox(self, image):
-        """Redimensiona manteniendo proporción y rellena con gris 114 (igual que en entrenamiento)."""
-        from PIL import Image
-
-        width, height = image.size
-        scale = min(self.imgsz / width, self.imgsz / height)
-        new_w, new_h = max(1, round(width * scale)), max(1, round(height * scale))
-        resized = image.resize((new_w, new_h), Image.BILINEAR)
-        canvas = Image.new("RGB", (self.imgsz, self.imgsz), (114, 114, 114))
-        pad_x, pad_y = (self.imgsz - new_w) // 2, (self.imgsz - new_h) // 2
-        canvas.paste(resized, (pad_x, pad_y))
-        array = np.asarray(canvas, dtype=np.float32) / 255.0
-        return array.transpose(2, 0, 1)[None], scale, pad_x, pad_y
-
     def predict(self, image, conf, iou):
-        image = image.convert("RGB")
-        width, height = image.size
-        tensor, scale, pad_x, pad_y = self._letterbox(image)
+        rgb = np.asarray(image.convert("RGB"))
+        height, width = rgb.shape[:2]
+        tensor, scale, pad_x, pad_y = letterbox(rgb, self.imgsz)
         started = time.perf_counter()
         output = self.session.run(None, {self.input_name: tensor})[0]
         elapsed_ms = int((time.perf_counter() - started) * 1000)

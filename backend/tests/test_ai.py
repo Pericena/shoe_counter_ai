@@ -247,3 +247,26 @@ def test_inference_failure_falls_back_to_manual(manager, monkeypatch):
     body = upload(manager).json
     assert body["detected_count"] is None and body["model_version"] is None
     assert "falló" in body["message"]
+
+
+def test_letterbox_matches_ultralytics_geometry():
+    from app.ai.postprocess import letterbox
+    rgb = np.zeros((240, 320, 3), dtype=np.uint8)
+    tensor, scale, pad_x, pad_y = letterbox(rgb, 640)
+    assert tensor.shape == (1, 3, 640, 640) and tensor.dtype == np.float32
+    assert scale == 2.0 and pad_x == 0 and pad_y == 80
+    assert abs(float(tensor[0, 0, 0, 0]) - 114 / 255) < 1e-6  # relleno gris 114 como en entrenamiento
+    tensor, scale, pad_x, pad_y = letterbox(np.zeros((101, 333, 3), dtype=np.uint8), 640)
+    assert tensor.shape == (1, 3, 640, 640)
+
+
+def test_model_recommended_confidence_used(app, tmp_path):
+    version = tmp_path / "modelos" / "shoe-det-v777"
+    version.mkdir(parents=True)
+    (version / "model.onnx").write_bytes(b"x")
+    (version / "metadata.json").write_text(json.dumps({"version": "shoe-det-v777", "recommended_confidence": 0.25}))
+    app.config["AI_MODELS_DIR"] = tmp_path / "modelos"
+    app.config["AI_CONFIDENCE"] = None
+    assert detector_module.model_status()[0]["confidence_threshold"] == 0.25
+    app.config["AI_CONFIDENCE"] = 0.5  # fijado explícitamente: prevalece
+    assert detector_module.model_status()[0]["confidence_threshold"] == 0.5

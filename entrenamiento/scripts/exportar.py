@@ -24,28 +24,23 @@ import ultralytics
 from PIL import Image
 from ultralytics import YOLO
 
+# Nota: tras exportar, evalúa el ONNX (evaluar.py --weights <model.onnx> --device cpu --tag _onnx) y ejecuta
+# verificar_onnx.py para fijar en metadata.json las métricas del modelo que realmente usa la app.
+
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT = ROOT.parent
 
 
 def onnx_count(session, image_path, imgsz, conf, iou):
-    """Mismo pre/postproceso que backend/app/ai/detector.py."""
+    """Mismo pre/postproceso que backend/app/ai (letterbox idéntico a Ultralytics)."""
     import importlib.util
     spec = importlib.util.spec_from_file_location("postprocess", PROJECT / "backend" / "app" / "ai" / "postprocess.py")
     post = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(post)
-    decode_output, nms = post.decode_output, post.nms
-
-    image = Image.open(image_path).convert("RGB")
-    w, h = image.size
-    scale = min(imgsz / w, imgsz / h)
-    nw, nh = max(1, round(w * scale)), max(1, round(h * scale))
-    canvas = Image.new("RGB", (imgsz, imgsz), (114, 114, 114))
-    canvas.paste(image.resize((nw, nh), Image.BILINEAR), ((imgsz - nw) // 2, (imgsz - nh) // 2))
-    tensor = (np.asarray(canvas, dtype=np.float32) / 255.0).transpose(2, 0, 1)[None]
+    tensor, _, _, _ = post.letterbox(np.asarray(Image.open(image_path).convert("RGB")), imgsz)
     output = session.run(None, {session.get_inputs()[0].name: tensor})[0]
-    boxes, scores, _ = decode_output(output, conf)
-    return len(nms(boxes, scores, iou))
+    boxes, scores, _ = post.decode_output(output, conf)
+    return len(post.nms(boxes, scores, iou))
 
 
 def main():
@@ -76,13 +71,14 @@ def main():
 
     dataset = (ROOT / args.dataset).resolve()
     test_images = sorted((dataset / "images" / "test").iterdir())[:40]
-    model = YOLO(str(best))
+    reference = YOLO(str(onnx_path), task="detect")  # Ultralytics ejecutando el mismo ONNX
     mismatches = 0
     for image_path in test_images:
-        pt = len(model.predict(str(image_path), imgsz=args.imgsz, conf=conf, iou=0.5, verbose=False, device="cpu")[0].boxes)
-        ox = onnx_count(session, image_path, args.imgsz, conf, 0.5)
-        mismatches += pt != ox
-    print(f"Paridad PyTorch vs ONNX en {len(test_images)} imágenes de test: {len(test_images) - mismatches} iguales")
+        expected = len(reference.predict(str(image_path), imgsz=args.imgsz, conf=conf, iou=0.5, verbose=False, device="cpu")[0].boxes)
+        mismatches += onnx_count(session, image_path, args.imgsz, conf, 0.5) != expected
+    print(f"Paridad pipeline del backend vs Ultralytics-ONNX en {len(test_images)} imágenes: {len(test_images) - mismatches} iguales")
+    if mismatches:
+        raise SystemExit("El pipeline del backend no reproduce al ONNX de Ultralytics: no se exporta.")
 
     weights_dir.mkdir(parents=True)
     export_dir.mkdir(parents=True)

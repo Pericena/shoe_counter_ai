@@ -49,6 +49,10 @@ KaggleHub reutiliza su caché (`%USERPROFILE%\.cache\kagglehub`) y no descarga d
 # Exportación versionada: modelo\pesos\<versión>\best.pt + modelo\exportados\<versión>\model.onnx
 .venv\Scripts\python -I scripts\exportar.py --run runs\shoe-det-v001 --dataset datasets\zapatos_v1
 
+# Medir el ONNX que usa la app (métricas oficiales) y verificar la paridad con el backend:
+.venv\Scripts\python -I scripts\evaluar.py --run runs\shoe-det-v001 --dataset datasets\zapatos_v1 --weights C:/xampp/htdocs/shoe_counter_ai/modelo/exportados/shoe-det-v001/model.onnx --device cpu --tag _onnx
+.venv\Scripts\python -I scripts\verificar_onnx.py --version shoe-det-v001 --dataset datasets\zapatos_v1
+
 # Inferencia sobre fotos propias (dibuja cajas y genera conteos.csv):
 .venv\Scripts\python -I scripts\inferir.py --weights ..\modelo\pesos\shoe-det-v001\best.pt --source <carpeta> --out salida
 ```

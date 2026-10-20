@@ -10,6 +10,7 @@ const ROUTES = [
   { path: "inventario", label: "Existencias", icon: "layers", perm: "inventory.view", module: "./views/inventory.js" },
   { path: "movimientos", label: "Movimientos", icon: "swap", perm: "inventory.view", module: "./views/movements.js" },
   { path: "conteo", label: "Conteo inteligente", icon: "camera", perm: "inventory.view", module: "./views/counting.js" },
+  { path: "etiquetas", label: "Lector de etiquetas", icon: "tag", perm: "inventory.view", module: "./views/labels.js" },
   { group: "Ventas" },
   { path: "pedidos", label: "Pedidos online", icon: "cart", perm: "orders.view", module: "./views/orders.js" },
   { path: "tienda", label: "Ver tienda pública", icon: "store", perm: "orders.view", href: "/tienda.html" },

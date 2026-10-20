@@ -73,6 +73,8 @@ export const fmt = {
   pct: (v) => (v === null || v === undefined ? "—" : `${(Number(v) * 100).toLocaleString("es", { maximumFractionDigits: 1 })} %`),
   date: (v) => (v ? new Date(v).toLocaleDateString("es", { dateStyle: "medium" }) : "—"),
   datetime: (v) => (v ? new Date(v).toLocaleString("es", { dateStyle: "short", timeStyle: "short" }) : "—"),
+  pairs: (n) => `${fmt.int(n)} ${Number(n) === 1 ? "par" : "pares"}`,
+  shoes: (n) => `${fmt.int(n)} ${Number(n) === 1 ? "zapato" : "zapatos"}`,
   compact: (v) => new Intl.NumberFormat("es", { notation: "compact", maximumFractionDigits: 1 }).format(Number(v)),
 };
 

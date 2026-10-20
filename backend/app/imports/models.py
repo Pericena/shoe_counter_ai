@@ -76,7 +76,8 @@ class TradeRecord(db.Model):
 
     __tablename__ = "trade_records"
     __table_args__ = (
-        UniqueConstraint("reporter", "flow", "year", "hs6_code", "partner", name="uq_trade_natural_key"),
+        UniqueConstraint("reporter", "flow", "year", "hs6_code", "partner", "occurrence", name="uq_trade_natural_key"),
+        CheckConstraint("occurrence >= 1", name="occurrence_positive"),
         CheckConstraint("value_usd IS NULL OR value_usd >= 0", name="value_non_negative"),
         CheckConstraint("quantity_pairs IS NULL OR quantity_pairs >= 0", name="quantity_non_negative"),
     )
@@ -88,6 +89,9 @@ class TradeRecord(db.Model):
     hs6_code = db.Column(db.String(6), nullable=False, index=True)
     category = db.Column(db.String(200))
     partner = db.Column(db.String(150), nullable=False, index=True)
+    # 1 normalmente. >1 solo si se importó con la política "separados": filas con la misma clave y
+    # valores distintos que el usuario declaró como operaciones distintas (n.º de aparición en el archivo).
+    occurrence = db.Column(db.Integer, nullable=False, default=1, server_default="1")
     is_aggregate = db.Column(db.Boolean, nullable=False, default=False, index=True)
     value_thousand_usd = db.Column(db.Numeric(18, 3))
     quantity_pairs = db.Column(db.Numeric(18, 2))
@@ -104,6 +108,7 @@ class TradeRecord(db.Model):
         return {
             "id": self.id, "reporter": self.reporter, "flow": self.flow, "year": self.year,
             "hs6_code": self.hs6_code, "category": self.category, "partner": self.partner,
+            "occurrence": self.occurrence,
             "is_aggregate": self.is_aggregate, "value_thousand_usd": num(self.value_thousand_usd),
             "quantity_pairs": num(self.quantity_pairs), "value_usd": num(self.value_usd),
             "value_usd_per_pair_source": num(self.value_usd_per_pair_source),

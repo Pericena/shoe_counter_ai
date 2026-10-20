@@ -22,8 +22,9 @@ Sistema de gestión para **una tienda de calzado**:
 | **Panel** | Indicadores reales, alertas de stock, actividad reciente, gráfico de entradas y salidas, estado del modelo de IA y estados vacíos con instrucciones |
 | **Catálogo** | Marcas, categorías, proveedores, productos (modelo comercial), variantes por talla y color con SKU, código de barras, costo y precio, fotos, y publicación en la tienda |
 | **Inventario** | Entradas, ventas, devoluciones, ajustes justificados y conteos físicos, siempre como movimientos inmutables con usuario. Búsqueda por código de barras, stock bajo/agotado, valor a costo, verificación stock ↔ libro mayor y bloqueo de concurrencia |
-| **Conteo inteligente** | Foto → detección de zapatos individuales con confianza → revisión (rechazar falsos positivos, dibujar omitidos) → desglose en pares y sueltos → confirmación → conciliación opcional con el stock. Sin modelo funciona en modo manual |
-| **Importar** | Excel y CSV del catálogo y del comercio exterior: detección de columnas, vista previa, validación, duplicados, filas rechazadas, confirmación e historial |
+| **Conteo inteligente** | **Cámara en vivo** con cajas y conteo en tiempo real, o subida de foto → detección de zapatos individuales con confianza → revisión (rechazar falsos positivos, dibujar omitidos) → desglose en pares y sueltos → confirmación → conciliación opcional con el stock. Sin modelo funciona en modo manual |
+| **Lector de etiquetas** | Cámara o foto → código de barras/QR + OCR sin conexión → marca, talla, color, precio y SKU propuestos → buscar la variante o crear el producto prellenado |
+| **Importar** | Excel y CSV (tipo detectado automáticamente) del catálogo y del comercio exterior: detección de columnas, vista previa, validación, duplicados, filas rechazadas, confirmación e historial |
 | **Reportes / BI** | Entradas y salidas por período, rotación, ajustes, precisión de los conteos con IA, y comercio exterior (importaciones vs. exportaciones, socios, valor por par, síntesis ejecutiva). Exportación CSV, Excel y PDF |
 | **Tienda online** | Catálogo público, filtros, carrito, pedidos con reserva de stock en una transacción, estados del pedido y consulta por código. Cobro manual: no hay pasarela configurada |
 | **Administración** | Usuarios, auditoría de operaciones y configuración |
@@ -105,6 +106,7 @@ Contra PostgreSQL real, incluidas las pruebas de concurrencia: [docs/08-pruebas.
 | [docs/02-arquitectura-datos-comerciales.md](docs/02-arquitectura-datos-comerciales.md) | Importación, diccionario de datos y política de duplicados |
 | [docs/03-autenticacion-seguridad.md](docs/03-autenticacion-seguridad.md) | Login, roles, auditoría, archivos y cabeceras |
 | [docs/04-ia-detector.md](docs/04-ia-detector.md) | Dataset, entrenamiento, métricas reales, exportación y conteo |
+| [docs/05-camara-ocr.md](docs/05-camara-ocr.md) | Cámara en vivo y lector de etiquetas (OCR, códigos de barras) |
 | [docs/06-bi-reportes.md](docs/06-bi-reportes.md) | Fórmulas de indicadores y exportaciones |
 | [docs/07-tienda-online.md](docs/07-tienda-online.md) | Catálogo, pedidos, stock transaccional y pagos pendientes |
 | [docs/08-pruebas.md](docs/08-pruebas.md) | Pruebas automatizadas y verificaciones manuales |
