@@ -1,0 +1,4 @@
+codigo_producto,marca,modelo,categoria,tipo_calzado,sku,codigo_barras,talla,color,costo,precio,stock_minimo,cantidad_entrada
+FIC-100,MarcaFicticia,Zapatilla Ficticia 100,Deportivo,Zapatilla,FIC-100-39-BL,,39,Blanco,40,79.9,2,5
+FIC-100,MarcaFicticia,Zapatilla Ficticia 100,Deportivo,Zapatilla,FIC-100-40-BL,,40,Blanco,40,79.9,2,3
+FIC-200,MarcaFicticia,Bota Ficticia 200,Botas,Bota,FIC-200-38-NE,,38,Negro,60,119,1,2

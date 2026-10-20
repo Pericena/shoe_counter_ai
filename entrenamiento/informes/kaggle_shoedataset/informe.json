@@ -1,0 +1,81 @@
+{
+  "images_dir": "C:\\Users\\Brigith\\.cache\\kagglehub\\datasets\\nishthakukreti\\shoedataset\\versions\\1\\Shoes_annotation",
+  "classes": [
+    "shoe"
+  ],
+  "images": 150,
+  "formats": {
+    "JPEG": 149,
+    "PNG": 1
+  },
+  "corrupt": [],
+  "unlabeled": [
+    "female-legs-closeup-casual-shoes-outdoor-69666447.jpg",
+    "images16.jpeg",
+    "images3.jpeg",
+    "images32.jpeg",
+    "images4.jpeg",
+    "images5.jpeg",
+    "images54.jpeg",
+    "images56.jpeg",
+    "images58.jpeg",
+    "images6.jpeg",
+    "man-stands-jeans-casual-shoes-everyday-male-legs-boots-78908705.jpg",
+    "top-view-child-s-white-casual-shoes-trousers-89078205.jpg",
+    "white-casual-shoes-making-decision-164047911.jpg"
+  ],
+  "label_problems": {},
+  "empty_labels": [],
+  "boxes_total": 300,
+  "boxes_per_image": {
+    "1": 4,
+    "2": 126,
+    "4": 4,
+    "6": 1,
+    "10": 1,
+    "12": 1
+  },
+  "class_counts": {
+    "shoe": 300
+  },
+  "exact_duplicates": [
+    [
+      "top-view-child-s-white-casual-shoes-trousers-89078205.jpg",
+      "top-view-child-s-white-casual-shoes-trousers-890782052.jpg"
+    ]
+  ],
+  "near_duplicates": [
+    [
+      "top-view-child-s-white-casual-shoes-trousers-89078205.jpg",
+      "top-view-child-s-white-casual-shoes-trousers-890782052.jpg"
+    ],
+    [
+      "white-casual-shoes-making-decision-164048000.jpg",
+      "white-casual-shoes-making-decision-164048041.jpg"
+    ]
+  ],
+  "orphan_labels": [
+    "images69.xml.txt",
+    "images81.xml.txt"
+  ],
+  "resolution": {
+    "min": [
+      171,
+      168
+    ],
+    "max": [
+      3541,
+      5311
+    ],
+    "median": [
+      500,
+      333
+    ]
+  },
+  "box_area_fraction": {
+    "min": 0.0026,
+    "median": 0.0777,
+    "max": 0.4769
+  },
+  "annotation_type": "detección (cajas YOLO: clase cx cy w h normalizados)"
+}

@@ -1,21 +1,11 @@
 {
-  "id": "./",
-  "name": "Patitas IA — Perros y gatos",
-  "short_name": "Patitas IA",
-  "description": "Juega a clasificar fotos de perros y gatos y descubre retos amables para tu mascota.",
+  "name": "Shoe Counter AI — Gestión de la tienda",
+  "short_name": "Shoe Counter",
   "lang": "es",
-  "start_url": "./",
-  "scope": "./",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#f7f5ef",
-  "theme_color": "#f7f5ef",
-  "icons": [
-    {
-      "src": "assets/icon-pwa.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    }
-  ]
+  "background_color": "#f4f5f7",
+  "theme_color": "#14243a",
+  "icons": [{ "src": "assets/logo.svg", "sizes": "any", "type": "image/svg+xml" }]
 }

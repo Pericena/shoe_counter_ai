@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Catálogo de calzado con disponibilidad en tiempo real.">
+    <title>Tienda — Shoe Counter AI</title>
+    <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
+    <link rel="stylesheet" href="css/app.css">
+    <link rel="stylesheet" href="css/shop.css">
+    <script type="module" src="js/shop.js"></script>
+  </head>
+  <body>
+    <header class="shop-top">
+      <a class="shop-brand" href="tienda.html"><img src="assets/logo.svg" alt="" width="32" height="32"> Tienda de calzado</a>
+      <nav class="actions">
+        <button class="btn" id="lookup-btn" type="button">Estado de mi pedido</button>
+        <button class="btn primary" id="cart-btn" type="button">Carrito (<span id="cart-count">0</span>)</button>
+      </nav>
+    </header>
+    <main class="content shop-main" id="shop"></main>
+    <footer class="shop-foot">Precios y disponibilidad actualizados desde el inventario de la tienda. El pago se coordina con la tienda tras confirmar el pedido.</footer>
+  </body>
+</html>

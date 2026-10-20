@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Shoe Counter AI">
+  <rect width="64" height="64" rx="14" fill="#1f5fbf"/>
+  <path d="M10 41c0-3 1.6-5 4.5-5.6l9.3-2.1c2-.4 3.7-1.7 4.7-3.5l3.1-5.6c.6-1.1 2-1.5 3.1-.9l3.4 1.8c1 .5 1.4 1.7 1 2.7l-.7 1.7c3.2 1.6 6.6 2.4 10.2 2.4h1.4c1.7 0 3 1.4 3 3v4.1c0 1.7-1.3 3-3 3H13c-1.7 0-3-1.3-3-3V41z" fill="#ffffff"/>
+  <path d="M10 44h44v3a2 2 0 0 1-2 2H12a2 2 0 0 1-2-2v-3z" fill="#9ec5f4"/>
+  <circle cx="47" cy="17" r="8" fill="#eb6834"/>
+  <path d="M43.6 17.2l2.3 2.3 4.6-4.8" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

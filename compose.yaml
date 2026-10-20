@@ -1,8 +1,60 @@
+# shoe_counter_ai — entorno local con Docker Desktop.
+# App:        http://localhost:8088  (solo accesible desde este equipo)
+# PostgreSQL: sin puerto publicado; solo lo ve el servicio "app" por la red interna.
+# Puertos evitados por XAMPP: 80/443 (Apache), 3306 (MySQL), 8080 (Tomcat).
+# NO usar "docker compose down -v": borra el volumen de la base de datos.
+
+name: shoe_counter_ai
+
 services:
-  patitas-ia:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
-    ports:
-      - "8080:8080"
+  db:
+    image: postgres:16-alpine
     restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-shoe_counter}
+      POSTGRES_USER: ${POSTGRES_USER:-shoe_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env (copia .env.example)}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      SECRET_KEY: ${SECRET_KEY:?Define SECRET_KEY en .env (copia .env.example)}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-shoe_app}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-shoe_counter}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-15}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      AI_MODELS_DIR: /data/modelos
+      AI_MODEL_VERSION: ${AI_MODEL_VERSION:-}
+      AI_CONFIDENCE: ${AI_CONFIDENCE:-0.35}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8088}
+    ports:
+      - "127.0.0.1:${APP_PORT:-8088}:8000"
+    volumes:
+      # Fotos, importaciones y exportaciones quedan en ./storage del equipo anfitrión.
+      - ./storage:/data/storage
+      # Modelos de detección exportados (ONNX). Solo lectura dentro del contenedor.
+      - ./modelo/exportados:/data/modelos:ro
+    networks: [internal]
+
+volumes:
+  pgdata:
+
+networks:
+  internal:

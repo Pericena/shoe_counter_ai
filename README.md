@@ -1,217 +1,129 @@
-# Patitas IA
+# Shoe Counter AI
 
-Sistema de apoyo a la toma de decisiones que clasifica una foto como **perro** o **gato**.
+Sistema de gestión para **una tienda de calzado**:
+
+- inventario por modelo, talla y color con libro de movimientos;
+- conteo de zapatos en fotos con un detector de visión por computadora y revisión humana;
+- importación y BI de datos de comercio exterior de calzado;
+- reportes, exportaciones;
+- tienda online conectada al stock real.
 
 | | |
 |---|---|
-| **Materia** | Soporte a la toma de decisiones |
-| **Docente** | Jesús Bautista |
 | **Alumno** | Luishiño Pericena |
-| **Producto** | Aplicación web estática, modelo de visión y contenedor Docker |
+| **Stack** | Python 3.12 · Flask 3.1 · SQLAlchemy 2 / Alembic · PostgreSQL 16 · HTML/CSS/JS sin frameworks ni CDN · ONNX Runtime · Ultralytics YOLO (solo entrenamiento) · Docker Compose |
+| **Estado** | Ver [docs/BITACORA.md](docs/BITACORA.md): qué está probado y qué falta |
 
-![Portada de Patitas IA: un perro y un gato junto al título del proyecto](docs/imagenes/portada-patitas.jpg)
+## Funcionalidades
 
-La persona aporta la foto. El sistema comprueba que haya una mascota, estima la clase y muestra un porcentaje de confianza. La decisión final sigue siendo de quien usa la aplicación: si la confianza es baja, el resultado se marca como poco seguro.
-
-No hace falta Node.js. La página, los estilos y el modelo ya están listos. Docker solo levanta Nginx para servir esos archivos.
-
----
-
-## 1. Qué decisión apoya
-
-El problema es binario: ante una imagen, decidir si el animal es un perro o un gato.
-
-Patitas IA no reemplaza el criterio de la persona. Ordena la evidencia en cuatro pasos:
-
-1. Rechaza fotos que no muestran un perro ni un gato (personas, objetos, escenas vacías).
-2. Calcula una probabilidad con la red neuronal entrenada.
-3. Traduce esa probabilidad a una etiqueta y a un porcentaje de confianza.
-4. Guarda el resultado en el mismo dispositivo para poder revisarlo después.
-
-![Flujo de decisión: foto o cámara, filtro de mascota, red neuronal, confianza y decisión](docs/imagenes/flujo-decision.jpg)
-
-Si la confianza queda por debajo del 60 %, la interfaz avisa que el resultado es poco seguro. Eso evita tratar una estimación débil como si fuera un hecho.
-
----
-
-## 2. Cómo se usa
-
-![Interfaz de Patitas IA con la foto, los botones de cámara y carga, y la tarjeta de resultado](docs/imagenes/interfaz-html.jpg)
-
-1. Abre la aplicación.
-2. Sube una imagen (JPG, PNG, WEBP o GIF, hasta 12 MB) o enciende la cámara.
-3. Pulsa **Analizar imagen**.
-4. Lee la clase, la confianza y, si quieres, escucha el resultado en voz alta.
-5. Revisa el historial de las últimas detecciones. Se puede borrar en cualquier momento.
-
-La foto no se envía a un servidor. El historial guarda solo la etiqueta, la confianza y la fecha, dentro del navegador.
-
----
-
-## 3. El modelo de inteligencia artificial
-
-El clasificador que corre en la página es una **red neuronal convolucional** llamada `patitas_classifier`. Se entrenó en el cuaderno `entrenamiento/Clasificador_de_perros_y_gatos.ipynb` y se exportó a TensorFlow.js.
-
-![Arquitectura del modelo: imagen 100×100, tres convoluciones, aplanar, capa densa y sigmoide](docs/imagenes/arquitectura-modelo.jpg)
-
-### Datos
-
-| Dato | Valor |
+| Módulo | Qué incluye |
 |---|---|
-| Conjunto | `cats_vs_dogs` de TensorFlow Datasets (fotos de Microsoft / Kaggle) |
-| Imágenes | 23 262 |
-| Tamaño de entrada | 100 × 100 píxeles, un canal en escala de grises |
-| Entrenamiento | 19 700 imágenes |
-| Validación | 3 562 imágenes |
-| Aumento de datos | Giro, desplazamiento, recorte, zoom y volteo horizontal y vertical |
+| **Acceso** | Login y logout con sesión segura, contraseñas con hash scrypt, bloqueo tras intentos fallidos, CSRF, cambio obligatorio de contraseña temporal, recuperación por correo (si se configura SMTP) y 4 roles con permisos verificados en el servidor |
+| **Panel** | Indicadores reales, alertas de stock, actividad reciente, gráfico de entradas y salidas, estado del modelo de IA y estados vacíos con instrucciones |
+| **Catálogo** | Marcas, categorías, proveedores, productos (modelo comercial), variantes por talla y color con SKU, código de barras, costo y precio, fotos, y publicación en la tienda |
+| **Inventario** | Entradas, ventas, devoluciones, ajustes justificados y conteos físicos, siempre como movimientos inmutables con usuario. Búsqueda por código de barras, stock bajo/agotado, valor a costo, verificación stock ↔ libro mayor y bloqueo de concurrencia |
+| **Conteo inteligente** | Foto → detección de zapatos individuales con confianza → revisión (rechazar falsos positivos, dibujar omitidos) → desglose en pares y sueltos → confirmación → conciliación opcional con el stock. Sin modelo funciona en modo manual |
+| **Importar** | Excel y CSV del catálogo y del comercio exterior: detección de columnas, vista previa, validación, duplicados, filas rechazadas, confirmación e historial |
+| **Reportes / BI** | Entradas y salidas por período, rotación, ajustes, precisión de los conteos con IA, y comercio exterior (importaciones vs. exportaciones, socios, valor por par, síntesis ejecutiva). Exportación CSV, Excel y PDF |
+| **Tienda online** | Catálogo público, filtros, carrito, pedidos con reserva de stock en una transacción, estados del pedido y consulta por código. Cobro manual: no hay pasarela configurada |
+| **Administración** | Usuarios, auditoría de operaciones y configuración |
 
-La salida usa **sigmoide**, un número entre 0 y 1:
-
-- cerca de **0** → gato
-- cerca de **1** → perro
-
-En la página, si el valor es 0,5 o menor se muestra **Gato**; si es mayor, **Perro**. La confianza es la probabilidad de la clase elegida.
-
-### Capas
-
-El archivo `web/modelo/model.json` describe esta secuencia:
-
-| Capa | Qué hace |
-|---|---|
-| Entrada `100×100×1` | Recibe la foto ya en gris y normalizada entre 0 y 1 |
-| Convolución, 32 filtros 3×3, ReLU | Busca bordes y texturas simples |
-| MaxPool 2×2 | Reduce el tamaño y se queda con lo más marcado |
-| Convolución, 64 filtros 3×3, ReLU | Combina esas marcas en formas |
-| MaxPool 2×2 | Vuelve a comprimir |
-| Convolución, 128 filtros 3×3, ReLU | Arma rasgos más específicos del animal |
-| MaxPool 2×2 | Última reducción espacial |
-| Aplanar | Convierte el mapa en un vector |
-| Densa, 100 neuronas, ReLU | Relaciona esos rasgos |
-| Densa, 1 neurona, sigmoide | Entrega la probabilidad perro/gato |
-
-Los pesos viven en `web/modelo/group1-shard1of2.bin` y `web/modelo/group1-shard2of2.bin`, al lado de `model.json`.
-
-### Cómo se entrenó
-
-En el cuaderno se compararon tres ideas: una red densa, esta red convolucional y una convolucional con dropout. La que se publicó es la convolucional con aumento de datos (`modeloCNN_AD`).
-
-- Optimizador: Adam
-- Pérdida: entropía cruzada binaria, porque solo hay dos clases
-- Métrica: exactitud
-- Lotes de 32 imágenes
-- 150 épocas sobre las imágenes aumentadas
-- Se guardó como `perros-gatos-cnn-ad.h5` y se convirtió con `tensorflowjs_converter`
-
-El cuaderno navegable está en la propia aplicación: `web/cuaderno/Clasificador_de_perros_y_gatos.html`.
-
-### Qué ocurre al pulsar Analizar
-
-Hay dos modelos, y cumplen papeles distintos.
-
-1. **Filtro.** COCO-SSD con MobileNet v2 mira la imagen a 400×400. Solo sigue adelante si detecta `dog` o `cat` con puntuación de al menos 0,25. Si ve una persona con puntuación de al menos 0,40 y no hay mascota, la foto se rechaza.
-2. **Clasificador propio.** La misma imagen se reduce a 100×100, se pasa a gris con los pesos del cuaderno (`0,114` azul, `0,587` verde, `0,299` rojo) y se divide entre 255. `model.predict` devuelve la sigmoide.
-
-El filtro viene de un CDN la primera vez. El clasificador propio se carga desde `web/modelo/`.
-
----
-
-## 4. La página HTML
-
-Todo lo que ve la persona está en `web/`. Es un sitio estático: HTML y un script dentro de `index.html`. No hay servidor de Node.
-
-Tailwind se carga en el navegador y lee las clases escritas en el HTML (`bg-cream`, `flex`, `max-w-6xl`, los colores propios y el resto). Así el diseño se aplica sin compilar nada. `styles.css` solo guarda lo que Tailwind no cubre.
-
-| Pieza | Función |
-|---|---|
-| `web/index.html` | Pantalla, cámara, carga de foto, clasificación, voz e historial |
-| `web/styles.css` | Detalles propios: píxeles, foco, cámara y títulos en móvil |
-| `web/service-worker.js` | Permite instalar la app y reutilizar archivos sin conexión |
-| `web/manifest.webmanifest` | Nombre, color e icono de la aplicación instalable |
-| `web/assets/` | Ilustración, iconos y favicon |
-| `web/modelo/` | Topología y pesos del clasificador |
-| `web/cuaderno/` | Explicación navegable del entrenamiento |
-
-TensorFlow.js y el detector COCO-SSD se piden por CDN. Por eso la **primera** visita necesita internet. Después, el service worker puede guardar esos recursos.
-
-La cámara pide permiso al navegador y funciona en `localhost` o con HTTPS. Si no hay cámara, siempre se puede subir una foto.
-
----
-
-## 5. Docker
-
-Docker empaqueta la carpeta `web/` dentro de Nginx. El navegador habla con el puerto **8080**. Nginx entrega el HTML, el modelo y los estilos. No instala Node ni entrena nada.
-
-![Nginx dentro de Docker sirve HTML, modelo y estilos al navegador en localhost:8080](docs/imagenes/arquitectura-docker.jpg)
-
-| Archivo | Función |
-|---|---|
-| `docker/Dockerfile` | Imagen `nginx:1.27-alpine`. Copia `web/` a `/usr/share/nginx/html` |
-| `docker/nginx.conf` | Escucha en el 8080, comprime texto y JSON, y define caché |
-| `compose.yaml` | Construye la imagen y publica `8080:8080` |
-| `.dockerignore` | Deja fuera el cuaderno, las fotos del README y `node_modules` |
-
-Nginx añade cabeceras para no mezclar el sitio en un iframe ajeno y para permitir la cámara solo en esta misma página. Los pesos `.bin` se cachean un año porque no cambian. `model.json` se cachea una hora. La página y el service worker no se quedan pegados en caché, para que una actualización se note al recargar.
-
-Hay un chequeo de salud: cada 30 segundos Nginx pregunta si la página de inicio responde.
-
-### Arrancar
-
-Con [Docker](https://docs.docker.com/get-docker/) instalado, en esta carpeta:
+## Inicio rápido en Windows (Docker Desktop)
 
 ```bash
-docker compose up --build
+copy .env.example .env
 ```
 
-Abre [http://localhost:8080](http://localhost:8080).
-
-Para detenerlo: `docker compose down`.
-
-### Sin Docker
-
-Cualquier servidor estático de la carpeta `web/` sirve. Un ejemplo con Python, sin instalar Node:
+Edita `.env`: una `SECRET_KEY` aleatoria y `POSTGRES_PASSWORD` (solo letras y números). Después:
 
 ```bash
-python -m http.server 8080 --directory web
+docker compose up --build -d
+docker compose exec app flask --app run users create-admin --username admin --full-name "Tu nombre"
 ```
 
-No abras `index.html` con doble clic. La cámara, el modelo y el service worker necesitan una dirección `http://`, no `file://`.
+| Dirección | Para qué |
+|---|---|
+| http://localhost:8088 | Aplicación de gestión (inicia sesión con el usuario creado) |
+| http://localhost:8088/tienda.html | Tienda pública |
 
----
+Sin Docker, con un entorno virtual y SQLite o tu propio PostgreSQL: ver [docs/09-despliegue-operacion.md](docs/09-despliegue-operacion.md) §3.
 
-## 6. Carpetas
+> No uses `docker compose down -v`: borra la base de datos. Copias de seguridad y restauración: [docs/09](docs/09-despliegue-operacion.md) §4.
 
-```text
-.
-├── README.md                 Esta guía
-├── compose.yaml              Arranque con Docker
-├── .dockerignore
-├── docker/
-│   ├── Dockerfile
-│   └── nginx.conf
-├── docs/
-│   └── imagenes/             Fotos de esta documentación
-├── entrenamiento/
-│   └── Clasificador_de_perros_y_gatos.ipynb
-└── web/                      Lo que ve el navegador
-    ├── index.html
-    ├── styles.css
-    ├── service-worker.js
-    ├── manifest.webmanifest
-    ├── assets/
-    ├── modelo/
-    │   ├── model.json
-    │   ├── group1-shard1of2.bin
-    │   └── group1-shard2of2.bin
-    └── cuaderno/
-        └── Clasificador_de_perros_y_gatos.html
+## Uso básico
+
+1. **Productos**:
+   1. Crea una **marca** (y categorías y proveedores si quieres) en sus pestañas.
+   2. Pulsa **Nuevo producto**.
+   3. En el producto, añade una **Nueva variante** por cada talla y color, con SKU, costo, precio y stock mínimo. Opcionalmente sube fotos y marca «Publicar en la tienda online».
+2. **Existencias** → **Movimiento**:
+   - registra la **entrada por compra** (el stock empieza en 0);
+   - las ventas, devoluciones, ajustes (con motivo) y conteos físicos se registran igual;
+   - el buscador de código acepta un lector de códigos de barras.
+3. **Conteo inteligente**:
+   1. Sube o fotografía los zapatos.
+   2. Revisa las cajas: un clic rechaza una detección y arrastrar añade un zapato omitido.
+   3. Indica cuántos **pares completos** y **zapatos sueltos** hay.
+   4. **Confirma**. Si quieres, **concilia** con la variante contada: se registra un conteo físico con la diferencia, a tu nombre. El stock nunca cambia solo por subir una foto.
+4. **Importar Excel/CSV**: elige el tipo (catálogo o comercio exterior), valida, revisa la vista previa y las incidencias, y confirma. Plantillas y ejemplos FICTICIOS en `datos/ejemplos/`.
+
+## Puertos y variables
+
+| Servicio | Puerto | Notas |
+|---|---|---|
+| App | 8088, solo `127.0.0.1` | Evita los puertos de XAMPP (80, 443, 3306, 8080) |
+| PostgreSQL | No publicado | Solo en la red interna de Docker |
+
+Variables de entorno, todas en [.env.example](.env.example):
+
+| Variable | Uso |
+|---|---|
+| `SECRET_KEY` | Obligatoria |
+| `POSTGRES_*` / `DATABASE_URL` | Base de datos |
+| `SESSION_COOKIE_SECURE`, `SESSION_HOURS` | Sesión |
+| `LOGIN_*`, `ORDERS_PER_IP_PER_HOUR` | Límites de intentos y de pedidos |
+| `AI_MODEL_VERSION`, `AI_CONFIDENCE`, `AI_IOU` | Detector |
+| `SMTP_*` | Recuperación de contraseña por correo |
+| `TRUST_PROXY` | Proxy HTTPS |
+
+## Pruebas
+
+```bash
+cd backend
+..\.venv\Scripts\python -m pytest
 ```
 
----
+Contra PostgreSQL real, incluidas las pruebas de concurrencia: [docs/08-pruebas.md](docs/08-pruebas.md).
 
-## 7. Límites de la decisión
+## Documentación
 
-- Una foto oscura, borrosa o con varias mascotas puede fallar.
-- El filtro previo también se equivoca: a veces deja pasar algo que no es mascota, o frena una foto válida.
-- La confianza es una estimación del modelo, no una certeza.
-- El historial permanece solo en ese navegador. Borrar los datos del sitio lo elimina.
-- El proyecto es educativo. Sirve para apoyar una clasificación sencilla, no para un diagnóstico ni para identificar una mascota concreta.
+| Documento | Contenido |
+|---|---|
+| [docs/BITACORA.md](docs/BITACORA.md) | Registro cronológico de cambios, pruebas, pendientes y reversión |
+| [docs/00-auditoria-fase0.md](docs/00-auditoria-fase0.md) | Auditoría inicial (estado de Patitas IA) |
+| [docs/01-fase1-base.md](docs/01-fase1-base.md) | Base del backend e inventario (histórico) |
+| [docs/02-arquitectura-datos-comerciales.md](docs/02-arquitectura-datos-comerciales.md) | Importación, diccionario de datos y política de duplicados |
+| [docs/03-autenticacion-seguridad.md](docs/03-autenticacion-seguridad.md) | Login, roles, auditoría, archivos y cabeceras |
+| [docs/04-ia-detector.md](docs/04-ia-detector.md) | Dataset, entrenamiento, métricas reales, exportación y conteo |
+| [docs/06-bi-reportes.md](docs/06-bi-reportes.md) | Fórmulas de indicadores y exportaciones |
+| [docs/07-tienda-online.md](docs/07-tienda-online.md) | Catálogo, pedidos, stock transaccional y pagos pendientes |
+| [docs/08-pruebas.md](docs/08-pruebas.md) | Pruebas automatizadas y verificaciones manuales |
+| [docs/09-despliegue-operacion.md](docs/09-despliegue-operacion.md) | Instalación, copias de seguridad y producción |
+| [entrenamiento/README.md](entrenamiento/README.md) · [modelo/README.md](modelo/README.md) | Pipeline de entrenamiento y artefactos del modelo |
+
+## Estructura
+
+```
+backend/        API Flask (app/: auth, audit, products, inventory, files, ai, imports, exports, reports, shop),
+                migraciones Alembic y pruebas pytest
+web/            Frontend: index.html (gestión), login.html, tienda.html, css/, js/ (módulos ES), assets/
+entrenamiento/  Pipeline del detector (scripts, configs, informes de datasets)
+modelo/         pesos/ (best.pt) y exportados/ (model.onnx + metadata.json) por versión
+datos/          ejemplos/ FICTICIOS; entrada/ y procesados/ para datos reales (no versionados)
+storage/        Fotos e importaciones (no versionado)
+docs/           Documentación y bitácora
+```
+
+Historia: el repositorio empezó como «Patitas IA» (clasificador de perros y gatos). Ese contenido se eliminó y puede consultarse en el commit `415ecfd` (tag `respaldo-pre-fase1`).
+
+Licencia del código: Apache 2.0 ([LICENSE](LICENSE)). El detector se entrena con Ultralytics YOLO (AGPL-3.0); ver [docs/04](docs/04-ia-detector.md) §7.

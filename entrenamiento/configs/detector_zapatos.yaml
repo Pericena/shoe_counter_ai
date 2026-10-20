@@ -1,0 +1,17 @@
+# Configuración del detector de zapatos (una clase: "zapato").
+# Cambia "version" en cada entrenamiento: nunca se sobrescribe una versión existente.
+version: shoe-det-v001
+dataset: datasets/zapatos_v1/data.yaml
+model: yolo11s.pt          # pesos COCO preentrenados (Ultralytics). Alternativa ligera: yolo11n.pt
+epochs: 60
+patience: 15               # parada temprana si mAP de validación no mejora
+imgsz: 640
+batch: 16                  # RTX 3050 6 GB: 16 con yolo11s a 640 px. Si hay "out of memory", baja a 8
+seed: 42
+deterministic: true
+device: auto               # auto = GPU 0 si CUDA está disponible; si no, CPU (mucho más lento)
+workers: 0                 # equipo con 7,6 GB de RAM: con workers>0 Windows se quedó sin memoria (ver bitácora)
+cache: false
+optimizer: auto
+cos_lr: true
+close_mosaic: 10

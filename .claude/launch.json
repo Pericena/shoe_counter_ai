@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "shoe-counter-local",
+      "runtimeExecutable": "C:\\xampp\\htdocs\\shoe_counter_ai\\.venv\\Scripts\\python.exe",
+      "runtimeArgs": ["C:\\xampp\\htdocs\\shoe_counter_ai\\backend\\run.py"],
+      "port": 8088
+    }
+  ]
+}
