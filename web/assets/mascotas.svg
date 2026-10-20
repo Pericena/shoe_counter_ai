@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 340" role="img" aria-labelledby="title desc" shape-rendering="crispEdges">
+  <title id="title">Perro y gato pixel art</title>
+  <desc id="desc">Dos mascotas dibujadas como personajes de un videojuego retro: un perro canela y un gato amarillo.</desc>
+  <g fill="#fff" opacity=".8">
+    <path d="M58 47h14v14H58zm28-14h14v14H86zm294 35h14v14h-14zm28-14h14v14h-14zM220 34h14v14h-14z"/>
+    <path d="M66 104h14v14H66zm350 76h14v14h-14z"/>
+  </g>
+  <path fill="#b8ceae" d="M34 278h412v18H34z"/>
+  <path fill="#d9e7d1" d="M16 296h448v18H16z"/>
+  <path fill="#293a30" d="M77 260h126v18H77zm208 0h126v18H285z"/>
+  <path fill="#b96849" d="M91 134H73v-36h18V80h36V62h72v18h18v18h18v90h-18v54h-18v18h-54v-18h-36v-18H91z"/>
+  <path fill="#db8b62" d="M109 134H91V98h18V80h72v18h18v36h18v54h-18v36h-18v18h-54v-18h-18v-18h-18z"/>
+  <path fill="#b96849" d="M73 98H55v72h18v18h18v-18h18v-36H91v-18H73z"/>
+  <path fill="#b96849" d="M181 98V80h36v18h18v72h-18v18h-18v-18h-18v-36h18v-18h-18z"/>
+  <path fill="#f5d5ae" d="M109 170h18v18h-18zm54 0h18v18h-18zm-36 18h36v18h-36zm-18 36h18v18h-18zm72 0h18v18h-18z"/>
+  <path fill="#26352b" d="M109 152h18v18h-18zm54 0h18v18h-18zm-36 54h36v18h-36z"/>
+  <path fill="#fff" d="M113 156h7v7h-7zm54 0h7v7h-7z"/>
+  <path fill="#46765a" d="M109 244h36v16h-36zm72 0h36v16h-36z"/>
+  <path fill="#f4d77b" d="M266 134h18V98h18V62h36v18h18v18h36v36h18v108h-18v18H284v-18h-18z"/>
+  <path fill="#d8b94d" d="M284 98V62h36v18h-18v36h-18zm72 0V80h18v18h36v36h-18v-18h-18v-18z"/>
+  <path fill="#f4d77b" d="M284 152h18v-18h18v18h18v18h-18v18h-18v-18h-18zm72 0h18v-18h18v18h18v18h-18v18h-18v-18h-18z"/>
+  <path fill="#26352b" d="M302 170h18v18h-18zm72 0h18v18h-18zm-54 36h36v18h-36z"/>
+  <path fill="#fff" d="M306 174h7v7h-7zm72 0h7v7h-7z"/>
+  <path fill="#46765a" d="M284 244h36v16h-36zm72 0h36v16h-36z"/>
+  <path fill="#f4d77b" d="M244 89h12v12h-12zm-18 18h12v12h-12zm198 18h12v12h-12z"/>
+</svg>
