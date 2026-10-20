@@ -326,3 +326,29 @@ Login → 12 secciones sin errores → marca, categoría, producto y variante �
 | Interfaz (DOM) | Conteo, producto y Existencias sin errores |
 
 **Aviso**: el panel del navegador integrado de Claude **bloquea la cámara**. Para usarla, abre `http://localhost:8088` en Chrome o Edge.
+
+## 2026-10-20 — Prompt maestro (POS, compras, integraciones, BI): integración del backend
+
+**Hecho y verificado**
+- Módulos registrados en la app: ventas/devoluciones (TPV), compras y reposición, integraciones (entrada `/api/integrations/inbound/<code>/events` con `X-Integration-Key`, sin CSRF), notificaciones, registro inteligente por visión, analítica (KPI, pronóstico, anomalías, duplicados, datos incompletos) y Power BI (`/api/bi/datasets/<conjunto>.csv|json` con sesión `bi.view` o token Bearer; CLI `flask bi create-views` y `flask bi create-reader`, la contraseña se toma de `BI_READER_PASSWORD`).
+- Las cajas del conteo IA se pueden asociar a una variante (`ai_detections.variant_id`) y se muestra el desglose `by_variant`. Las líneas de pedido guardan el costo (`order_items.unit_cost`).
+- Migración `dcc9820fdb23`: crea la ubicación PRINCIPAL, `stock_levels` a partir del stock actual, asigna ubicación y canal al libro mayor histórico y cambia las restricciones (`movement_not_empty`, nuevos tipos, `channel_valid`, `pendiente_revision`, propósitos de archivos). También siembra los permisos y roles nuevos.
+  - Se probó contra una copia de la base dev: upgrade, conciliación correcta, downgrade, upgrade otra vez, y `flask db check` sin diferencias.
+  - Después se aplicó a `storage/dev.sqlite3`.
+- Asistente de importación:
+  - Asignación manual de columnas: `POST /api/imports/<id>/mapping`.
+  - Columnas nuevas: nombre, subcategoría, segmento, material, temporada, colección, sistema de tallas, proveedor, ref. de proveedor, imagen_url, stock_inicial y ubicación. imagen_url nunca se descarga: el producto queda con la foto pendiente.
+  - Vista previa por fila (crear, actualizar, omitir o revisar) contra la base de datos.
+  - Validación de talla, color, código de barras y precio.
+  - El stock inicial es idempotente por variante y ubicación.
+  - Bloquea los duplicados de marca y modelo con otro código.
+  - Informe `GET /api/imports/<id>/issues.csv`.
+- Pruebas (SQLite):
+  - La suite completa pasa: 117 pruebas, 2 omitidas. Se ajustaron las pruebas de la tienda al nuevo modelo de reservas.
+  - Nuevas en `tests/test_escenarios.py`: 8 pruebas, todas pasan. Cubren los escenarios §16 5, 6, 7, 8, 11, 12, 13, 14, 15 (parcial), 16, 18, 19 y 20.
+
+**Pendiente**
+- Escenarios §16 sin prueba nueva: 1, 2, 3, 4, 9 y 10. Algunos los cubren en parte pruebas existentes (products, ai, identification, inventory). Para 2, 3 y 4 falta una prueba de `/api/vision/*` con imágenes sintéticas.
+- Ejecutar la suite en PostgreSQL (Docker) y probar `flask bi create-views` en PostgreSQL.
+- Frontend de los módulos nuevos: TPV, compras, ubicaciones, integraciones, notificaciones, registro inteligente, KPI y tokens de BI.
+- Documentos 10–13 (integraciones, compras, notificaciones, Power BI) y actualización del README.

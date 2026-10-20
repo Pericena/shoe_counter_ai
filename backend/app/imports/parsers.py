@@ -89,9 +89,10 @@ class TableValidator:
 
     columns = {}   # nombre canónico -> (obligatoria, alias normalizados)
 
-    def __init__(self, frame, duplicate_policy="rechazar"):
+    def __init__(self, frame, duplicate_policy="rechazar", mapping_override=None):
         self.frame = frame
         self.duplicate_policy = duplicate_policy
+        self.mapping_override = mapping_override or {}
         self.issues = []
         self.rows = []
         self.mapping = {}
@@ -101,9 +102,21 @@ class TableValidator:
 
     def map_columns(self):
         found = {normalize_header(c): c for c in self.frame.columns}
+        by_label = {str(c): c for c in self.frame.columns}
         missing = []
+        # Asignaciones elegidas por la persona en el asistente (columna del archivo -> campo del sistema).
+        for name, source in self.mapping_override.items():
+            if name not in self.columns:
+                self.issue(1, name, "error", f"El campo '{name}' no existe en este tipo de importación.")
+            elif source not in by_label:
+                self.issue(1, name, "error", f"La columna '{source}' no está en el archivo.")
+            else:
+                self.mapping[name] = by_label[source]
+        taken = set(self.mapping.values())
         for name, (required, aliases) in self.columns.items():
-            match = next((found[a] for a in (name, *aliases) if a in found), None)
+            if name in self.mapping:
+                continue
+            match = next((found[a] for a in (name, *aliases) if a in found and found[a] not in taken), None)
             if match is not None:
                 self.mapping[name] = match
             elif required:
@@ -182,14 +195,45 @@ class TableValidator:
 
 # ---------- Catálogo de la tienda ----------
 
+SIZE_SYSTEMS = ("EU", "US", "UK", "BR", "CM", "MX", "otro")
+NUMERIC_SIZE = re.compile(r"^\d{1,2}([.,]5)?$")
+LETTER_SIZE = re.compile(r"^(XXS|XS|S|M|L|XL|XXL|XXXL|U|TU|UNICA|ÚNICA)$", re.IGNORECASE)
+
+
+def size_problem(size, system=None):
+    """None si la talla es válida; si no, el motivo. 'otro' acepta cualquier texto."""
+    if system == "otro":
+        return None
+    text = size.strip()
+    if LETTER_SIZE.match(text):
+        return None
+    if not NUMERIC_SIZE.match(text):
+        return f"Talla '{size}' no reconocida (usa números como 38 o 38.5, o elige sistema_tallas = otro)."
+    value = float(text.replace(",", "."))
+    low, high = {"US": (1, 18), "UK": (1, 16), "MX": (10, 33), "CM": (10, 35), "BR": (15, 50)}.get(system or "EU", (15, 52))
+    if not low <= value <= high:
+        return f"Talla {size} fuera de rango para el sistema {system or 'EU'} ({low}–{high})."
+    return None
+
+
 class CatalogValidator(TableValidator):
     columns = {
-        "codigo_producto": (True, ("codigo", "codigo_modelo", "product_code")),
+        "codigo_producto": (True, ("codigo", "codigo_modelo", "product_code", "codigo_interno")),
         "marca": (True, ("brand",)),
         "modelo": (True, ("model", "model_name", "nombre_modelo")),
+        "nombre": (False, ("nombre_comercial", "name", "producto")),
         "categoria": (False, ("category",)),
+        "subcategoria": (False, ("subcategory",)),
         "tipo_calzado": (False, ("tipo", "footwear_type")),
+        "segmento": (False, ("segment", "genero", "publico")),
+        "material": (False, ()),
+        "temporada": (False, ("season",)),
+        "coleccion": (False, ("collection",)),
+        "sistema_tallas": (False, ("size_system", "sistema_talla")),
+        "proveedor": (False, ("supplier",)),
+        "ref_proveedor": (False, ("referencia_proveedor", "supplier_ref")),
         "descripcion": (False, ("description",)),
+        "imagen_url": (False, ("imagen", "foto", "url_imagen", "image", "image_url")),
         "sku": (True, ()),
         "codigo_barras": (False, ("barcode", "ean", "upc")),
         "talla": (True, ("size",)),
@@ -197,10 +241,14 @@ class CatalogValidator(TableValidator):
         "costo": (False, ("cost", "costo_unitario")),
         "precio": (False, ("price", "precio_venta")),
         "stock_minimo": (False, ("min_stock", "minimo")),
-        "cantidad_entrada": (False, ("entrada", "cantidad", "stock_inicial")),
+        "stock_inicial": (False, ("stock", "existencias", "stock_actual", "saldo_inicial")),
+        "cantidad_entrada": (False, ("entrada", "cantidad", "compra")),
+        "ubicacion": (False, ("location", "almacen", "tienda")),
     }
-    limits = {"codigo_producto": 50, "marca": 100, "modelo": 150, "categoria": 100, "tipo_calzado": 100,
-              "descripcion": 5000, "sku": 60, "codigo_barras": 64, "talla": 20, "color": 50}
+    limits = {"codigo_producto": 50, "marca": 100, "modelo": 150, "nombre": 200, "categoria": 100,
+              "subcategoria": 100, "tipo_calzado": 100, "segmento": 60, "material": 100, "temporada": 60,
+              "coleccion": 100, "proveedor": 150, "ref_proveedor": 100, "descripcion": 5000, "imagen_url": 1000,
+              "sku": 60, "codigo_barras": 64, "talla": 20, "color": 50, "ubicacion": 30, "sistema_tallas": 10}
 
     def validate_row(self, record, row):
         clean = {}
@@ -212,6 +260,22 @@ class CatalogValidator(TableValidator):
         for name in ("codigo_producto", "marca", "modelo", "sku", "talla", "color"):
             if not clean[name]:
                 self.issue(row, name, "error", "Campo obligatorio vacío.")
+        system = clean["sistema_tallas"]
+        if system:
+            match = next((s for s in SIZE_SYSTEMS if s.lower() == system.lower()), None)
+            if match is None:
+                self.issue(row, "sistema_tallas", "error", f"Sistema de tallas no válido; usa {', '.join(SIZE_SYSTEMS)}.")
+            clean["sistema_tallas"] = system = match
+        if clean["talla"] and (problem := size_problem(clean["talla"], system)):
+            self.issue(row, "talla", "error", problem)
+        if clean["color"] and not re.search(r"[a-zA-ZáéíóúñÁÉÍÓÚÑ]", clean["color"]):
+            self.issue(row, "color", "error", f"Color '{clean['color']}' no válido: debe ser un nombre (p. ej. Negro).")
+        if clean["codigo_barras"] and not re.fullmatch(r"[0-9A-Za-z\-]{4,64}", clean["codigo_barras"]):
+            self.issue(row, "codigo_barras", "error", "Código de barras con caracteres no válidos.")
+        if clean["imagen_url"]:
+            # Nunca se descargan URLs de un archivo: la foto se sube desde la ficha (validada y re-codificada).
+            self.issue(row, "imagen_url", "advertencia",
+                       "La imagen no se descarga desde la URL: el producto quedará con foto pendiente de subir.")
         for name in ("costo", "precio"):
             try:
                 number = parse_number(self.value(record, name))
@@ -221,7 +285,7 @@ class CatalogValidator(TableValidator):
             if number is not None and number < 0:
                 self.issue(row, name, "error", "No puede ser negativo.")
             clean[name] = number.quantize(Decimal("0.01")) if number is not None else None
-        for name in ("stock_minimo", "cantidad_entrada"):
+        for name in ("stock_minimo", "stock_inicial", "cantidad_entrada"):
             try:
                 number = parse_number(self.value(record, name))
             except ValueError as error:
@@ -231,6 +295,10 @@ class CatalogValidator(TableValidator):
                 self.issue(row, name, "error", "Debe ser un entero mayor o igual a 0.")
                 continue
             clean[name] = int(number) if number is not None else None
+        if clean.get("precio") is not None and clean.get("costo") is not None and clean["precio"] < clean["costo"]:
+            self.issue(row, "precio", "advertencia", f"Precio {clean['precio']} menor que el costo {clean['costo']} (margen negativo).")
+        if clean.get("precio") == 0:
+            self.issue(row, "precio", "advertencia", "Precio 0: el artículo no podrá venderse hasta fijar un precio.")
         return clean
 
     def after_rows(self):

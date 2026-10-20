@@ -5,8 +5,53 @@ Revises: 090f29bf83c0
 Create Date: 2026-10-20 17:37:16.702336
 
 """
+from datetime import datetime, timezone
+
 from alembic import op
 import sqlalchemy as sa
+
+# Copias congeladas (las migraciones no importan la aplicación).
+OLD_TYPES = ("('entrada_compra', 'salida_venta', 'devolucion_cliente', 'devolucion_proveedor', 'ajuste', "
+             "'conteo_fisico', 'salida_pedido', 'cancelacion_pedido')")
+NEW_TYPES = ("('stock_inicial', 'entrada_compra', 'salida_venta', 'devolucion_cliente', 'devolucion_proveedor', "
+             "'transferencia_salida', 'transferencia_entrada', 'ajuste', 'conteo_fisico', 'danado', 'perdido', "
+             "'reserva', 'liberacion_reserva', 'salida_pedido', 'cancelacion_pedido')")
+CHANNELS = "('tienda', 'tpv', 'online', 'importacion', 'ia', 'compras', 'sistema', 'integracion')"
+OLD_STATUSES = "('activo', 'inactivo', 'descontinuado')"
+NEW_STATUSES = "('activo', 'inactivo', 'descontinuado', 'pendiente_revision')"
+OLD_PURPOSES = "('producto', 'conteo', 'importacion', 'etiqueta')"
+NEW_PURPOSES = "('producto', 'conteo', 'importacion', 'etiqueta', 'registro', 'derivado')"
+
+NEW_PERMISSIONS = [
+    ("prices.manage", "Modificar costos y precios"),
+    ("locations.manage", "Gestionar tiendas, almacenes y ubicaciones"),
+    ("pos.sell", "Vender en el punto de venta"),
+    ("returns.manage", "Procesar devoluciones e inspección"),
+    ("purchases.manage", "Crear órdenes de compra, revisar reposición y recibir mercancía"),
+    ("purchases.approve", "Aprobar órdenes de compra y recomendaciones de reposición"),
+    ("bi.view", "Acceder a la API de datos analíticos (Power BI)"),
+    ("integrations.manage", "Configurar integraciones de TPV/e-commerce y revisar su registro"),
+    ("notifications.view", "Ver y gestionar notificaciones"),
+    ("settings.manage", "Cambiar umbrales y parámetros"),
+]
+_CONSULTA = ["dashboard.view", "products.view", "inventory.view", "reports.view", "orders.view", "notifications.view"]
+_OPERADOR = _CONSULTA + ["inventory.sell", "counts.create", "orders.manage"]
+_VENDEDOR = _CONSULTA + ["inventory.sell", "pos.sell", "returns.manage", "orders.manage", "counts.create"]
+_COMPRAS = _CONSULTA + ["purchases.manage", "exports.run", "products.manage", "prices.manage"]
+_ANALISTA = _CONSULTA + ["exports.run", "bi.view"]
+_AUDITOR = _CONSULTA + ["audit.view", "exports.run", "bi.view", "settings.view"]
+_INVENTARIO = sorted(set(_OPERADOR + _VENDEDOR + [
+    "products.manage", "prices.manage", "inventory.move", "locations.manage", "counts.confirm",
+    "imports.manage", "exports.run", "purchases.manage"]))
+ROLES = {
+    "inventario": ("Encargado de inventario", _INVENTARIO),
+    "vendedor": ("Vendedor", _VENDEDOR),
+    "compras": ("Compras", _COMPRAS),
+    "analista": ("Analista", _ANALISTA),
+    "auditor": ("Auditor", _AUDITOR),
+    "operador": ("Operador", _OPERADOR),
+    "consulta": ("Consulta", _CONSULTA),
+}
 
 
 # revision identifiers, used by Alembic.
@@ -381,20 +426,49 @@ def upgrade():
         batch_op.create_index(batch_op.f('ix_ai_detections_variant_id'), ['variant_id'], unique=False)
         batch_op.create_foreign_key(batch_op.f('fk_ai_detections_variant_id_product_variants'), 'product_variants', ['variant_id'], ['id'], ondelete='SET NULL')
 
+    # 1) Columnas nuevas, primero admitiendo nulos para poder rellenar el histórico.
     with op.batch_alter_table('inventory_movements', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('location_id', sa.Integer(), nullable=False))
+        batch_op.add_column(sa.Column('location_id', sa.Integer(), nullable=True))
         batch_op.add_column(sa.Column('counterpart_location_id', sa.Integer(), nullable=True))
-        batch_op.add_column(sa.Column('reserved_delta', sa.Integer(), nullable=False))
-        batch_op.add_column(sa.Column('stock_before', sa.Integer(), nullable=False))
+        batch_op.add_column(sa.Column('reserved_delta', sa.Integer(), server_default='0', nullable=False))
+        batch_op.add_column(sa.Column('stock_before', sa.Integer(), nullable=True))
         batch_op.add_column(sa.Column('location_balance_after', sa.Integer(), nullable=True))
-        batch_op.add_column(sa.Column('channel', sa.String(length=20), nullable=False))
+        batch_op.add_column(sa.Column('channel', sa.String(length=20), server_default='tienda', nullable=False))
         batch_op.add_column(sa.Column('external_ref', sa.String(length=150), nullable=True))
         batch_op.add_column(sa.Column('evidence_file_id', sa.Integer(), nullable=True))
+
+    # 2) Datos: ubicación principal, niveles de stock y libro mayor histórico asignado a ella.
+    bind = op.get_bind()
+    now = datetime.now(timezone.utc)
+    locations = sa.table('locations', sa.column('id', sa.Integer), sa.column('code', sa.String),
+                         sa.column('name', sa.String), sa.column('kind', sa.String), sa.column('is_default', sa.Boolean),
+                         sa.column('is_active', sa.Boolean), sa.column('created_at', sa.DateTime(timezone=True)))
+    op.bulk_insert(locations, [{"code": "PRINCIPAL", "name": "Tienda principal", "kind": "tienda",
+                                "is_default": True, "is_active": True, "created_at": now}])
+    loc_id = bind.execute(sa.text("SELECT id FROM locations WHERE code = 'PRINCIPAL'")).scalar()
+    bind.execute(sa.text("INSERT INTO stock_levels (variant_id, location_id, on_hand, reserved, bin, updated_at) "
+                         "SELECT id, :loc, stock_quantity, 0, NULL, :now FROM product_variants"),
+                 {"loc": loc_id, "now": now})
+    bind.execute(sa.text(
+        "UPDATE inventory_movements SET location_id = :loc, stock_before = balance_after - quantity, "
+        "location_balance_after = balance_after, "
+        "channel = CASE WHEN order_id IS NOT NULL THEN 'online' WHEN count_id IS NOT NULL THEN 'ia' ELSE 'tienda' END"),
+        {"loc": loc_id})
+
+    # 3) Restricciones definitivas.
+    with op.batch_alter_table('inventory_movements', schema=None) as batch_op:
+        batch_op.alter_column('location_id', existing_type=sa.Integer(), nullable=False)
+        batch_op.alter_column('stock_before', existing_type=sa.Integer(), nullable=False)
         batch_op.create_index(batch_op.f('ix_inventory_movements_location_id'), ['location_id'], unique=False)
         batch_op.create_index('uq_movement_channel_external_ref', ['channel', 'external_ref'], unique=True, postgresql_where=sa.text('external_ref IS NOT NULL'), sqlite_where=sa.text('external_ref IS NOT NULL'))
         batch_op.create_foreign_key(batch_op.f('fk_inventory_movements_counterpart_location_id_locations'), 'locations', ['counterpart_location_id'], ['id'], ondelete='RESTRICT')
         batch_op.create_foreign_key(batch_op.f('fk_inventory_movements_evidence_file_id_stored_files'), 'stored_files', ['evidence_file_id'], ['id'], ondelete='SET NULL')
         batch_op.create_foreign_key(batch_op.f('fk_inventory_movements_location_id_locations'), 'locations', ['location_id'], ['id'], ondelete='RESTRICT')
+        batch_op.drop_constraint(op.f('ck_inventory_movements_quantity_not_zero'), type_='check')
+        batch_op.create_check_constraint('movement_not_empty', "quantity <> 0 OR reserved_delta <> 0")
+        batch_op.drop_constraint(op.f('ck_inventory_movements_type_valid'), type_='check')
+        batch_op.create_check_constraint('type_valid', f"movement_type IN {NEW_TYPES}")
+        batch_op.create_check_constraint('channel_valid', f"channel IN {CHANNELS}")
 
     with op.batch_alter_table('order_items', schema=None) as batch_op:
         batch_op.add_column(sa.Column('unit_cost', sa.Numeric(precision=12, scale=2), nullable=True))
@@ -403,11 +477,17 @@ def upgrade():
         batch_op.add_column(sa.Column('stock_mode', sa.String(length=10), server_default='descuento', nullable=False))
         batch_op.add_column(sa.Column('location_id', sa.Integer(), nullable=True))
         batch_op.create_foreign_key(batch_op.f('fk_orders_location_id_locations'), 'locations', ['location_id'], ['id'], ondelete='RESTRICT')
+    bind.execute(sa.text("UPDATE orders SET location_id = :loc"), {"loc": loc_id})
 
     with op.batch_alter_table('product_variants', schema=None) as batch_op:
         batch_op.add_column(sa.Column('reserved_quantity', sa.Integer(), server_default='0', nullable=False))
+        batch_op.create_check_constraint('reserved_valid', "reserved_quantity >= 0 AND reserved_quantity <= stock_quantity")
+        batch_op.drop_constraint(op.f('ck_product_variants_status_valid'), type_='check')
+        batch_op.create_check_constraint('status_valid', f"status IN {NEW_STATUSES}")
 
     with op.batch_alter_table('products', schema=None) as batch_op:
+        batch_op.drop_constraint(op.f('ck_products_status_valid'), type_='check')
+        batch_op.create_check_constraint('status_valid', f"status IN {NEW_STATUSES}")
         batch_op.add_column(sa.Column('name', sa.String(length=200), nullable=True))
         batch_op.add_column(sa.Column('subcategory', sa.String(length=100), nullable=True))
         batch_op.add_column(sa.Column('segment', sa.String(length=60), nullable=True))
@@ -421,24 +501,70 @@ def upgrade():
         batch_op.add_column(sa.Column('parent_file_id', sa.Integer(), nullable=True))
         batch_op.create_index(batch_op.f('ix_stored_files_parent_file_id'), ['parent_file_id'], unique=False)
         batch_op.create_foreign_key(batch_op.f('fk_stored_files_parent_file_id_stored_files'), 'stored_files', ['parent_file_id'], ['id'], ondelete='SET NULL')
+        batch_op.drop_constraint(op.f('ck_stored_files_purpose_valid'), type_='check')
+        batch_op.create_check_constraint('purpose_valid', f"purpose IN {NEW_PURPOSES}")
 
     with op.batch_alter_table('suppliers', schema=None) as batch_op:
         batch_op.add_column(sa.Column('lead_time_days', sa.Integer(), nullable=True))
+        batch_op.create_check_constraint('lead_time_non_negative', "lead_time_days IS NULL OR lead_time_days >= 0")
 
+    _seed_roles(bind)
     # ### end Alembic commands ###
 
 
+def _seed_roles(bind):
+    """Añade permisos y roles nuevos sin tocar usuarios ni asignaciones existentes (solo se añaden, nunca se quitan)."""
+    for code, description in NEW_PERMISSIONS:
+        if bind.execute(sa.text("SELECT 1 FROM permissions WHERE code = :c"), {"c": code}).first() is None:
+            bind.execute(sa.text("INSERT INTO permissions (code, description) VALUES (:c, :d)"), {"c": code, "d": description})
+    for code, (name, _) in ROLES.items():
+        if bind.execute(sa.text("SELECT 1 FROM roles WHERE code = :c"), {"c": code}).first() is None:
+            bind.execute(sa.text("INSERT INTO roles (code, name) VALUES (:c, :n)"), {"c": code, "n": name})
+    grants = {"admin": [r[0] for r in bind.execute(sa.text("SELECT code FROM permissions"))]}
+    grants.update({code: perms for code, (_, perms) in ROLES.items()})
+    for role, perms in grants.items():
+        for perm in perms:
+            bind.execute(sa.text(
+                "INSERT INTO role_permissions (role_id, permission_id) "
+                "SELECT r.id, p.id FROM roles r, permissions p WHERE r.code = :r AND p.code = :p "
+                "AND NOT EXISTS (SELECT 1 FROM role_permissions rp WHERE rp.role_id = r.id AND rp.permission_id = p.id)"),
+                {"r": role, "p": perm})
+
+
 def downgrade():
-    # ### commands auto generated by Alembic - please adjust! ###
+    bind = op.get_bind()
+    blocking = bind.execute(sa.text(
+        "SELECT COUNT(*) FROM inventory_movements WHERE movement_type NOT IN " + OLD_TYPES)).scalar()
+    blocking += max(0, bind.execute(sa.text("SELECT COUNT(*) FROM locations")).scalar() - 1)
+    if blocking:
+        raise RuntimeError("No se puede revertir: hay movimientos de tipos nuevos o varias ubicaciones; "
+                           "se perdería historial del libro mayor.")
+    codes = sa.bindparam("codes", expanding=True)
+    new_codes = [c for c, _ in NEW_PERMISSIONS]
+    bind.execute(sa.text("DELETE FROM role_permissions WHERE permission_id IN "
+                         "(SELECT id FROM permissions WHERE code IN :codes)").bindparams(codes), {"codes": new_codes})
+    bind.execute(sa.text("DELETE FROM permissions WHERE code IN :codes").bindparams(codes), {"codes": new_codes})
+    bind.execute(sa.text("UPDATE users SET role_id = (SELECT id FROM roles WHERE code = 'consulta') "
+                         "WHERE role_id IN (SELECT id FROM roles WHERE code IN ('vendedor', 'compras', 'analista', 'auditor'))"))
+    bind.execute(sa.text("DELETE FROM roles WHERE code IN ('vendedor', 'compras', 'analista', 'auditor')"))
+    bind.execute(sa.text("UPDATE products SET status = 'inactivo' WHERE status = 'pendiente_revision'"))
+    bind.execute(sa.text("UPDATE product_variants SET status = 'inactivo' WHERE status = 'pendiente_revision'"))
+    bind.execute(sa.text("UPDATE stored_files SET purpose = 'producto' WHERE purpose IN ('registro', 'derivado')"))
+
     with op.batch_alter_table('suppliers', schema=None) as batch_op:
+        batch_op.drop_constraint(op.f('ck_suppliers_lead_time_non_negative'), type_='check')
         batch_op.drop_column('lead_time_days')
 
     with op.batch_alter_table('stored_files', schema=None) as batch_op:
+        batch_op.drop_constraint(op.f('ck_stored_files_purpose_valid'), type_='check')
+        batch_op.create_check_constraint('purpose_valid', f"purpose IN {OLD_PURPOSES}")
         batch_op.drop_constraint(batch_op.f('fk_stored_files_parent_file_id_stored_files'), type_='foreignkey')
         batch_op.drop_index(batch_op.f('ix_stored_files_parent_file_id'))
         batch_op.drop_column('parent_file_id')
 
     with op.batch_alter_table('products', schema=None) as batch_op:
+        batch_op.drop_constraint(op.f('ck_products_status_valid'), type_='check')
+        batch_op.create_check_constraint('status_valid', f"status IN {OLD_STATUSES}")
         batch_op.drop_column('supplier_ref')
         batch_op.drop_column('collection')
         batch_op.drop_column('season')
@@ -449,6 +575,9 @@ def downgrade():
         batch_op.drop_column('name')
 
     with op.batch_alter_table('product_variants', schema=None) as batch_op:
+        batch_op.drop_constraint(op.f('ck_product_variants_reserved_valid'), type_='check')
+        batch_op.drop_constraint(op.f('ck_product_variants_status_valid'), type_='check')
+        batch_op.create_check_constraint('status_valid', f"status IN {OLD_STATUSES}")
         batch_op.drop_column('reserved_quantity')
 
     with op.batch_alter_table('orders', schema=None) as batch_op:
@@ -460,6 +589,11 @@ def downgrade():
         batch_op.drop_column('unit_cost')
 
     with op.batch_alter_table('inventory_movements', schema=None) as batch_op:
+        batch_op.drop_constraint(op.f('ck_inventory_movements_channel_valid'), type_='check')
+        batch_op.drop_constraint(op.f('ck_inventory_movements_type_valid'), type_='check')
+        batch_op.create_check_constraint('type_valid', f"movement_type IN {OLD_TYPES}")
+        batch_op.drop_constraint(op.f('ck_inventory_movements_movement_not_empty'), type_='check')
+        batch_op.create_check_constraint('quantity_not_zero', "quantity <> 0")
         batch_op.drop_constraint(batch_op.f('fk_inventory_movements_location_id_locations'), type_='foreignkey')
         batch_op.drop_constraint(batch_op.f('fk_inventory_movements_evidence_file_id_stored_files'), type_='foreignkey')
         batch_op.drop_constraint(batch_op.f('fk_inventory_movements_counterpart_location_id_locations'), type_='foreignkey')
