@@ -7,20 +7,12 @@ __pycache__/
 
 
 # Datos y archivos de la tienda (no se versionan)
-storage/
-backups/
-datos/entrada/
-datos/procesados/
+
 *.sqlite3
 *.db
 
 # Pesos y resultados de entrenamiento (se documentan, no se suben)
-modelo/pesos/*
-modelo/exportados/*
-modelo/resultados/*
-!modelo/**/.gitkeep
-entrenamiento/runs/
-entrenamiento/datasets/
+
 
 .vscode/
 .idea/

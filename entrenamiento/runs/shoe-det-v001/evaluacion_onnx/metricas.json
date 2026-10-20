@@ -1,0 +1,167 @@
+{
+  "weights": "C:\\xampp\\htdocs\\shoe_counter_ai\\modelo\\exportados\\shoe-det-v001\\model.onnx",
+  "count_conf_threshold": 0.2,
+  "val_count_sweep": {
+    "0.15": {
+      "images": 300,
+      "mae": 1.2867,
+      "exact_rate": 0.3967,
+      "relative_error": 0.2974,
+      "true_shoes": 1298
+    },
+    "0.2": {
+      "images": 300,
+      "mae": 1.19,
+      "exact_rate": 0.4,
+      "relative_error": 0.275,
+      "true_shoes": 1298
+    },
+    "0.25": {
+      "images": 300,
+      "mae": 1.1933,
+      "exact_rate": 0.4067,
+      "relative_error": 0.2758,
+      "true_shoes": 1298
+    },
+    "0.3": {
+      "images": 300,
+      "mae": 1.2733,
+      "exact_rate": 0.4033,
+      "relative_error": 0.2943,
+      "true_shoes": 1298
+    },
+    "0.35": {
+      "images": 300,
+      "mae": 1.43,
+      "exact_rate": 0.38,
+      "relative_error": 0.3305,
+      "true_shoes": 1298
+    },
+    "0.4": {
+      "images": 300,
+      "mae": 1.5633,
+      "exact_rate": 0.3833,
+      "relative_error": 0.3613,
+      "true_shoes": 1298
+    },
+    "0.45": {
+      "images": 300,
+      "mae": 1.7133,
+      "exact_rate": 0.38,
+      "relative_error": 0.396,
+      "true_shoes": 1298
+    },
+    "0.5": {
+      "images": 300,
+      "mae": 1.94,
+      "exact_rate": 0.3533,
+      "relative_error": 0.4484,
+      "true_shoes": 1298
+    },
+    "0.55": {
+      "images": 300,
+      "mae": 2.0733,
+      "exact_rate": 0.3467,
+      "relative_error": 0.4792,
+      "true_shoes": 1298
+    },
+    "0.6": {
+      "images": 300,
+      "mae": 2.2867,
+      "exact_rate": 0.31,
+      "relative_error": 0.5285,
+      "true_shoes": 1298
+    },
+    "0.65": {
+      "images": 300,
+      "mae": 2.5333,
+      "exact_rate": 0.2633,
+      "relative_error": 0.5855,
+      "true_shoes": 1298
+    },
+    "0.7": {
+      "images": 300,
+      "mae": 2.8533,
+      "exact_rate": 0.22,
+      "relative_error": 0.6595,
+      "true_shoes": 1298
+    }
+  },
+  "splits": {
+    "val": {
+      "precision": 0.7698,
+      "recall": 0.5855,
+      "map50": 0.666,
+      "map50_95": 0.3646,
+      "speed_ms": {
+        "preprocess": 7.89,
+        "inference": 165.3,
+        "loss": 0.0,
+        "postprocess": 5.18
+      },
+      "counting": {
+        "images": 300,
+        "mae": 1.19,
+        "exact_rate": 0.4,
+        "relative_error": 0.275,
+        "true_shoes": 1298
+      },
+      "at_count_threshold": {
+        "tp": 841,
+        "fp": 412,
+        "fn": 457
+      },
+      "predict_ms_mean": null
+    },
+    "test": {
+      "precision": 0.7672,
+      "recall": 0.6185,
+      "map50": 0.6869,
+      "map50_95": 0.3792,
+      "speed_ms": {
+        "preprocess": 8.62,
+        "inference": 176.37,
+        "loss": 0.0,
+        "postprocess": 5.41
+      },
+      "counting": {
+        "images": 300,
+        "mae": 1.23,
+        "exact_rate": 0.4,
+        "relative_error": 0.2723,
+        "true_shoes": 1355
+      },
+      "at_count_threshold": {
+        "tp": 905,
+        "fp": 373,
+        "fn": 450
+      },
+      "predict_ms_mean": 193.02
+    },
+    "test_externo": {
+      "precision": 0.8529,
+      "recall": 0.7467,
+      "map50": 0.823,
+      "map50_95": 0.5557,
+      "speed_ms": {
+        "preprocess": 9.05,
+        "inference": 180.91,
+        "loss": 0.0,
+        "postprocess": 4.92
+      },
+      "counting": {
+        "images": 137,
+        "mae": 0.562,
+        "exact_rate": 0.5693,
+        "relative_error": 0.2567,
+        "true_shoes": 300
+      },
+      "at_count_threshold": {
+        "tp": 246,
+        "fp": 69,
+        "fn": 54
+      },
+      "predict_ms_mean": 170.1
+    }
+  }
+}

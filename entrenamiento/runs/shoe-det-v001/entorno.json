@@ -1,0 +1,38 @@
+{
+  "version": "shoe-det-v001",
+  "started_at": "2026-10-20T14:34:18.805693+00:00",
+  "base_model": "yolo11s.pt",
+  "params": {
+    "data": "C:\\xampp\\htdocs\\shoe_counter_ai\\entrenamiento\\datasets\\zapatos_v1\\data.yaml",
+    "epochs": 60,
+    "patience": 15,
+    "imgsz": 640,
+    "batch": 16,
+    "seed": 42,
+    "deterministic": true,
+    "device": 0,
+    "workers": 0,
+    "cache": false,
+    "optimizer": "auto",
+    "cos_lr": true,
+    "close_mosaic": 10,
+    "fraction": 1.0,
+    "project": "C:\\xampp\\htdocs\\shoe_counter_ai\\entrenamiento\\runs",
+    "name": "shoe-det-v001",
+    "exist_ok": false,
+    "plots": true,
+    "verbose": true,
+    "single_cls": true
+  },
+  "hardware": {
+    "python": "3.12.4",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "torch": "2.14.1+cu126",
+    "ultralytics": "8.4.183",
+    "cuda_available": true,
+    "gpu": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+    "vram_gb": 6.0,
+    "cuda": "12.6"
+  },
+  "dataset_manifest": "datasets\\zapatos_v1\\manifest.json"
+}

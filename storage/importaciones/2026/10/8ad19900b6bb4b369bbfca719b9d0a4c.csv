@@ -1,0 +1,9 @@
+País_reportante,Flujo_comercial,Año,Código_SA6,Categoría_calzado,Socio_comercial,Valor_miles_USD,Cantidad_pares,Valor_USD,Valor_USD_por_par
+PaisFicticio,Importación,2021,640299,Deportivo (FICTICIO),SocioFicticioA,120,15000,120000,8
+PaisFicticio,Importación,2022,640299,Deportivo (FICTICIO),SocioFicticioA,150,16000,150000,9.375
+PaisFicticio,Importación,2022,640399,Cuero (FICTICIO),SocioFicticioB,80,4000,80000,20
+PaisFicticio,Exportación,2022,640399,Cuero (FICTICIO),SocioFicticioC,30,1200,30000,25
+PaisFicticio,Importación,2023,640299,Deportivo (FICTICIO),SocioFicticioA,170,17000,170000,10
+PaisFicticio,Exportación,2023,640399,Cuero (FICTICIO),SocioFicticioC,35,1300,35000,26.92
+PaisFicticio,Importación,2023,640299,Deportivo (FICTICIO),Mundo,260,30000,260000,8.67
+PaisFicticio,Trueque,2023,640299,Fila con error (FICTICIO),SocioFicticioD,1,1,1000,1000

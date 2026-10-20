@@ -1,0 +1,6 @@
+path: C:/xampp/htdocs/shoe_counter_ai/entrenamiento/datasets/zapatos_v1
+train: images/train
+val: images/test_externo
+test: images/test_externo
+names:
+  0: zapato

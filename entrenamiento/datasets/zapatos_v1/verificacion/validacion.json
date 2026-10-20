@@ -1,0 +1,26 @@
+{
+  "train": {
+    "images": 2400,
+    "labels": 2400,
+    "boxes": 10216,
+    "problems": []
+  },
+  "val": {
+    "images": 300,
+    "labels": 300,
+    "boxes": 1298,
+    "problems": []
+  },
+  "test": {
+    "images": 300,
+    "labels": 300,
+    "boxes": 1355,
+    "problems": []
+  },
+  "test_externo": {
+    "images": 137,
+    "labels": 137,
+    "boxes": 300,
+    "problems": []
+  }
+}
