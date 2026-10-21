@@ -1,8 +1,8 @@
-.shop-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .8rem 1.4rem; background: var(--sidebar); color: #fff; position: sticky; top: 0; z-index: 5; flex-wrap: wrap; }
+.shop-top { display: flex; justify-content: space-between; align-items: center; gap: .7rem; padding: .8rem 1.4rem; background: linear-gradient(90deg, #14243a 0%, #1a3f73 72%, #9a3e1c 140%); color: #fff; position: sticky; top: 0; z-index: 5; flex-wrap: wrap; }
 .shop-brand { display: flex; align-items: center; gap: .6rem; color: #fff; text-decoration: none; font-weight: 750; font-size: 1.05rem; }
 .shop-main { margin: 0 auto; }
 .shop-foot { text-align: center; color: var(--muted); font-size: .8rem; padding: 1.5rem 1rem 2.5rem; }
-.products { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 1rem; }
+.products { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 1rem; }
 .product { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; box-shadow: var(--shadow); }
 .product .photo { aspect-ratio: 4 / 3; background: var(--surface-2); display: grid; place-items: center; color: var(--muted); }
 .product .photo img { width: 100%; height: 100%; object-fit: cover; }
@@ -16,3 +16,13 @@
 .chip:disabled { opacity: .45; text-decoration: line-through; cursor: not-allowed; }
 .cart-line { display: grid; grid-template-columns: 1fr auto auto; gap: .6rem; align-items: center; padding: .5rem 0; border-bottom: 1px solid var(--line); }
 .cart-line input { width: 70px; }
+.photo-placeholder { display: grid; justify-items: center; gap: .25rem; color: var(--muted); }
+.photo-placeholder .icon { width: 28px; height: 28px; }
+@media (max-width: 640px) {
+  .shop-top { padding: .7rem .8rem; padding-top: max(.7rem, env(safe-area-inset-top)); }
+  .shop-top .actions { width: 100%; }
+  .shop-top .actions .btn { flex: 1 1 auto; }
+  .shop-main { padding-left: .7rem; padding-right: .7rem; }
+  .cart-line { grid-template-columns: 1fr auto; }
+  .cart-line input { grid-column: 1 / -1; width: 100%; }
+}

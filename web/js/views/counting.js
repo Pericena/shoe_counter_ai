@@ -31,11 +31,15 @@ async function renderList(root, { can }) {
   if (can("counts.create")) {
     const input = el("input", { type: "file", accept: "image/jpeg,image/png,image/webp", class: "sr-only", id: "count-file" });
     const notes = el("input", { placeholder: "Ubicación o nota (opcional): estante, caja, almacén…", maxlength: 200 });
+    const zoneTitle = el("strong", {}, "Arrastra aquí una foto o selecciónala");
+    const zoneHint = el("p.small.muted", {}, "JPG, PNG o WEBP, hasta 15 MB. La foto se guarda sin metadatos (EXIF/GPS).");
+    const zoneStatus = el("p.small");
     const zone = el("div.dropzone", {},
-      el("p", {}, el("strong", {}, "Arrastra aquí una foto o selecciónala")),
-      el("p.small.muted", {}, "JPG, PNG o WEBP, hasta 15 MB. La foto se guarda sin metadatos (EXIF/GPS)."),
-      el("div.actions", {}, el("label.btn.primary", { for: "count-file" }, icon("camera"), "Elegir foto"),
-        el("label.btn", { for: "count-file-camera" }, "Usar cámara")),
+      el("p", {}, zoneTitle),
+      zoneHint,
+      zoneStatus,
+      el("div.actions", {}, el("label.btn.primary", { for: "count-file" }, icon("upload"), "Elegir foto"),
+        el("label.btn", { for: "count-file-camera" }, icon("camera"), "Tomar foto")),
       el("input", { type: "file", accept: "image/*", capture: "environment", class: "sr-only", id: "count-file-camera",
         on: { change: (e) => send(e.target.files[0]) } }),
       el("div.filters", {}, notes), input);
@@ -44,16 +48,26 @@ async function renderList(root, { can }) {
       const form = new FormData();
       form.append("image", file);
       if (notes.value.trim()) form.append("notes", notes.value.trim());
-      zone.classList.add("drag");
-      zone.querySelector("strong").textContent = "Procesando la foto…";
+      zone.classList.add("busy");
+      zoneTitle.replaceChildren(el("span.spinner"), " Detectando zapatos…");
+      zoneHint.textContent = "La primera foto carga el modelo y puede tardar cerca de un minuto. Después se abre el conteo con las cajas.";
+      zoneStatus.replaceChildren();
       try {
         const count = await api.upload("/api/ai/counts", form);
+        if (!count || !count.id) throw new Error("La foto se envió, pero no volvió el conteo.");
         if (count.message) toast(count.message);
+        zoneTitle.textContent = `Listo: ${count.detected_count ?? 0} zapatos. Abriendo el conteo…`;
         location.hash = `#/conteo/${count.id}`;
       } catch (e) {
         showError(e);
-        zone.classList.remove("drag");
-        zone.querySelector("strong").textContent = "Arrastra aquí una foto o selecciónala";
+        zone.classList.remove("busy");
+        zoneTitle.textContent = "No se pudo leer la foto";
+        zoneHint.textContent = "JPG, PNG o WEBP, hasta 15 MB. Prueba otra vez.";
+        zoneStatus.replaceChildren(el("span.field-error", {}, e.message || "Error al procesar la foto."));
+      } finally {
+        input.value = "";
+        const cameraInput = document.getElementById("count-file-camera");
+        if (cameraInput) cameraInput.value = "";
       }
     }
     input.addEventListener("change", () => send(input.files[0]));
@@ -293,11 +307,12 @@ async function renderCount(root, countId, { can }) {
   const side = el("div.stack");
   const identityBox = el("div.stack.identity-box");
   root.append(pageHead(`Conteo #${count.id}`, `${fmt.datetime(count.created_at)} · ${count.user || "—"} · ${count.model_version ? "modelo " + count.model_version : "sin modelo (manual)"}`,
-    el("a.btn", { href: "#/conteo" }, "← Conteos"),
+    el("a.btn", { href: "#/conteo" }, icon("arrow-left"), "Conteos"),
     el("a.btn", { href: `/api/ai/counts/${count.id}/annotated.jpg`, download: `conteo-${count.id}.jpg` }, icon("download"), "Imagen anotada")),
   el("div.counter", {}, el("div", {}, viewer,
-    editable ? el("p.small.muted", {}, "Haz clic en una caja para rechazarla o volver a aceptarla. Arrastra sobre la foto para marcar un zapato que el modelo no vio. Las cajas manuales se eliminan con un clic.") : null),
-  side), identityBox);
+    editable ? el("p.small.muted", {}, "Haz clic en una caja para rechazarla o volver a aceptarla. Arrastra sobre la foto para marcar un zapato que el modelo no vio. Las cajas manuales se eliminan con un clic.") : null,
+    identityBox),
+  side));
 
   function accepted() { return boxes.filter((b) => b.accepted); }
 
@@ -308,8 +323,8 @@ async function renderCount(root, countId, { can }) {
     async function find() {
       try {
         const data = await api.get("/api/inventory/stock" + queryString({ q: search.value, limit: 50 }));
-        options(select, data.items, { placeholder: data.items.length ? "Selecciona la variante" : "Sin resultados",
-          label: (v) => `${v.sku} · ${v.brand} ${v.model_name} · T${v.size} ${v.color} (stock ${v.stock_quantity})`,
+        options(select, data.items, { placeholder: data.items.length ? "Selecciona modelo, talla y color" : "No hay tallas registradas",
+          label: (v) => `${v.brand} ${v.model_name} · talla ${v.size} · ${v.color} · ${v.sku} · ${v.stock_quantity} pares`,
           selected: selectedId });
       } catch (e) { showError(e); }
     }
@@ -324,8 +339,8 @@ async function renderCount(root, countId, { can }) {
     const ident = count.identification || {};
     const changer = () => {
       const picker = variantPicker(count.identified_sku || "", count.identified_variant_id);
-      return el("details", {}, el("summary", {}, count.identified ? "Cambiar el producto identificado" : "Identificar el producto a mano"),
-        picker.node, el("button.btn", {
+      return el("div.stack", {}, el("p.small.muted", {}, count.identified ? "Puedes cambiar el producto y la talla." : "Elige el modelo, la talla y el color de esta foto."),
+        picker.node, el("button.btn.primary", {
           type: "button",
           on: {
             async click() {
@@ -340,31 +355,33 @@ async function renderCount(root, countId, { can }) {
         }, "Asignar producto"));
     };
     if (!count.identified) {
-      return el("div.card", {}, el("h2", {}, "Producto de la foto"),
-        el("p", {}, "No se identificó un producto registrado en esta foto."),
+      return el("div.card", {}, el("h2", {}, "Producto y talla"),
+        el("p", {}, "Esta foto todavía no tiene modelo ni talla."),
         el("p.small.muted", {}, ident.codes && ident.codes.length
-          ? `Códigos leídos: ${ident.codes.join(", ")} (no coinciden con ningún SKU ni código de barras registrado).`
-          : "No se vio ningún código de barras ni etiqueta legible. Para que se identifique solo, incluye la etiqueta o el código de la caja en la foto, o usa «Identificar producto» en la cámara en vivo."),
+          ? `Códigos leídos: ${ident.codes.join(", ")}. No coinciden con ningún SKU ni código de barras.`
+          : "El detector cuenta zapatos, pero la marca y la talla salen del catálogo. Si el par no existe, créalo en Productos: estado Activo o Inactivo, y Publicar o No publicar."),
         ident.candidates && ident.candidates.length ? el("p.small", {}, `Posibles: ${ident.candidates.join(", ")}`) : null,
-        canEdit ? changer() : null);
+        canEdit ? changer() : null,
+        el("a.btn", { href: "#/productos" }, "Crear producto y talla"));
     }
     const c = count.comparison;
-    const photoPairs = c.photo_pairs_confirmed ?? Math.floor(c.photo_shoes / 2);
     const methodText = { codigo: "por el código de barras de la foto", etiqueta: "por la etiqueta de la foto",
       seleccion_en_vivo: "desde la cámara en vivo", manual: "asignado a mano" }[ident.method] || "";
-    return el("div.stack", {},
-      el("div.card", {}, el("h2", {}, "Foto frente a inventario"),
-        el("p.small.muted", {}, `Producto identificado ${methodText}.`),
-        el("div.kpis.compact-kpis", {},
-          el("div.kpi", {}, el("div.label", {}, "Variante"), el("div.value", {}, `${c.sku}`), el("div.note", {}, `Talla ${c.size} · ${c.color}`)),
-          el("div.kpi", {}, el("div.label", {}, "Stock en sistema"), el("div.value", {}, fmt.pairs(c.system_pairs))),
-          el("div.kpi", {}, el("div.label", {}, "En la foto"), el("div.value", {}, fmt.shoes(c.photo_shoes)),
-            el("div.note", {}, c.photo_pairs_confirmed !== null && c.photo_pairs_confirmed !== undefined
-              ? `${c.photo_pairs_confirmed} pares + ${c.photo_loose_confirmed} sueltos (confirmado)` : `≈ ${fmt.pairs(photoPairs)} (sin confirmar)`)),
-          el("div.kpi", {}, el("div.label", {}, "Diferencia orientativa"), el("div.value", {}, `${photoPairs - c.system_pairs > 0 ? "+" : ""}${fmt.pairs(photoPairs - c.system_pairs)}`))),
-        el("p.small.muted", {}, c.note),
-        canEdit ? changer() : null),
-      productCard(count.identified, { title: "Producto identificado en la foto" }));
+    const product = count.identified?.product;
+    const hit = (count.identified?.variants || []).find((v) => v.highlight) || {};
+    return el("div.card", {}, el("h2", {}, "Producto y talla"),
+      el("p.small.muted", {}, methodText ? `Identificado ${methodText}.` : "Producto asignado a esta foto."),
+      el("div.size-hero", {}, `Talla ${c.size}`),
+      el("p", {}, el("strong", {}, `${product?.brand || ""} ${product?.model_name || c.sku}`.trim()), ` · ${c.color}`),
+      el("dl.dl", {},
+        el("dt", {}, "SKU"), el("dd", {}, el("span.mono", {}, c.sku)),
+        el("dt", {}, "Pares en stock"), el("dd", {}, fmt.pairs(c.system_pairs)),
+        el("dt", {}, "En la foto"), el("dd", {}, c.photo_pairs_confirmed !== null && c.photo_pairs_confirmed !== undefined
+          ? `${c.photo_pairs_confirmed} pares + ${c.photo_loose_confirmed} sueltos` : fmt.shoes(c.photo_shoes)),
+        el("dt", {}, "Estado"), el("dd", {}, badge(hit.status === "activo" || product?.status === "activo" ? "good" : "", hit.status || product?.status || "—")),
+        el("dt", {}, "Tienda"), el("dd", {}, product?.is_published ? badge("info", "Publicado") : badge("", "No publicado"))),
+      el("p.small.muted", {}, c.note),
+      canEdit ? changer() : null);
   }
 
   function drawBoxes() {
@@ -376,7 +393,9 @@ async function renderCount(root, countId, { can }) {
       node.style.width = `${(b.x2 - b.x1) * 100}%`;
       node.style.height = `${(b.y2 - b.y1) * 100}%`;
       const label = b.source === "manual" ? "manual" : `${Math.round(b.confidence * 100)}%`;
-      node.append(el("span.tag", {}, `${index + 1} · ${label}${b.accepted ? "" : " ✕"}`));
+      const tag = el("span.tag", {}, `${index + 1} · ${label}`);
+      if (!b.accepted) tag.append(icon("close"));
+      node.append(tag);
       if (isEditable()) {
         node.append(el("button", {
           type: "button",
@@ -473,8 +492,11 @@ async function renderCount(root, countId, { can }) {
         const check = el("p.small");
         const updateCheck = () => {
           const sum = Number(pairs.value) * 2 + Number(loose.value);
-          check.textContent = sum === total ? `✓ ${pairs.value} pares × 2 + ${loose.value} sueltos = ${total} zapatos` : `✕ ${pairs.value} × 2 + ${loose.value} = ${sum}, pero hay ${total} zapatos marcados`;
-          check.className = sum === total ? "small" : "small field-error";
+          const ok = sum === total;
+          check.className = ok ? "small check-line" : "small field-error check-line";
+          check.replaceChildren(icon(ok ? "check" : "close"), ok
+            ? `${pairs.value} pares × 2 + ${loose.value} sueltos = ${total} zapatos`
+            : `${pairs.value} × 2 + ${loose.value} = ${sum}, pero hay ${total} zapatos marcados`);
         };
         pairs.addEventListener("input", updateCheck);
         loose.addEventListener("input", updateCheck);
@@ -524,14 +546,14 @@ async function renderCount(root, countId, { can }) {
         const data = await api.get("/api/inventory/stock" + queryString({ q: search.value, limit: 50 }));
         variants = data.items;
         options(select, variants, { placeholder: variants.length ? "Selecciona la variante contada" : "Sin resultados",
-          label: (v) => `${v.sku} · ${v.brand} ${v.model_name} · T${v.size} ${v.color} (sistema: ${v.stock_quantity})`,
+          label: (v) => `${v.sku} · ${v.brand} ${v.model_name} · talla ${v.size} · ${v.color} (sistema: ${v.stock_quantity})`,
           selected: count.identified_variant_id });
         updatePreview();
       } catch (e) { showError(e); }
     }
     function updatePreview() {
       const v = variants.find((x) => String(x.id) === select.value);
-      preview.textContent = v ? `Sistema: ${v.stock_quantity} pares → contado: ${countedPairs.value}. Diferencia: ${Number(countedPairs.value) - v.stock_quantity}.` : "";
+      preview.textContent = v ? `Sistema: ${v.stock_quantity} pares. Contado: ${countedPairs.value}. Diferencia: ${Number(countedPairs.value) - v.stock_quantity}.` : "";
     }
     search.addEventListener("change", find);
     select.addEventListener("change", updatePreview);

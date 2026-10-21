@@ -18,18 +18,14 @@ export function productCard(card, { title = "Producto reconocido", compact = fal
     el("dt", {}, "Categoría"), el("dd", {}, p.category || "—"),
     el("dt", {}, "Tipo"), el("dd", {}, p.footwear_type || "—"),
     el("dt", {}, "Proveedor"), el("dd", {}, p.supplier || "—"),
-    el("dt", {}, "Estado"), el("dd", {}, badge(p.status === "activo" ? "good" : "", p.status), " ",
-      p.is_published ? badge("info", "En tienda online") : null),
+    el("dt", {}, "Estado"), el("dd", {}, badge(p.status === "activo" ? "good" : "", p.status === "activo" ? "Activo" : p.status === "inactivo" ? "Inactivo" : p.status)),
+    el("dt", {}, "Tienda"), el("dd", {}, p.is_published ? badge("info", "Publicado") : badge("", "No publicado")),
     p.description ? el("dt", {}, "Descripción") : null, p.description ? el("dd", {}, p.description) : null);
 
   const kpis = el("div.kpis.compact-kpis", {},
     kpi("Pares en stock", fmt.int(t.pairs)),
-    kpi("Variantes", `${t.variants} (${t.low} bajas · ${t.out} agotadas)`),
-    kpi("Vendidos 30 días", fmt.int(t.sold_last_30_days)),
-    kpi("Reservados (pedidos)", fmt.int(t.reserved_open_orders)),
-    kpi("Valor a costo", fmt.money(t.value_at_cost), t.cost_complete ? null : "incompleto: hay variantes sin costo"),
-    kpi("Valor a precio de venta", fmt.money(t.value_at_price)),
-    kpi("Precio", t.price_min ? (t.price_min === t.price_max ? fmt.money(t.price_min) : `${fmt.money(t.price_min)} – ${fmt.money(t.price_max)}`) : "—"));
+    kpi("Tallas", `${t.variants} (${t.low} bajas · ${t.out} agotadas)`),
+    kpi("Valor a costo", fmt.money(t.value_at_cost), t.cost_complete ? null : "incompleto: hay variantes sin costo"));
 
   const matrix = el("div.table-wrap", {}, el("table.matrix", {},
     el("thead", {}, el("tr", {}, el("th", {}, "Color \\ Talla"), card.sizes.map((s) => el("th.num", {}, s)))),
@@ -43,15 +39,14 @@ export function productCard(card, { title = "Producto reconocido", compact = fal
   const recognized = card.variants.filter((v) => v.highlight);
   const hits = recognized.length ? el("div.alert.good", {},
     el("strong", {}, recognized.length === 1 ? "Variante reconocida: " : "Variantes reconocidas: "),
-    recognized.map((v) => `${v.sku} · talla ${v.size} · ${v.color} · ${fmt.pairs(v.stock_quantity)} en stock` +
-      (v.price ? ` · precio ${fmt.money(v.price)}` : "") + (v.last_movement_at ? ` · último movimiento ${fmt.date(v.last_movement_at)}` : "")).join(" | ")) : null;
+    recognized.map((v) => `${v.sku} · talla ${v.size} · ${v.color} · ${fmt.pairs(v.stock_quantity)}`).join(" | ")) : null;
 
   return el("div.card.product-card", {},
     el("div.card-head", {}, el("h2", {}, title), el("a.btn.small", { href: `#/productos/${p.id}` }, "Abrir producto")),
     hits,
     el("div.card-body", {}, photo, el("div", {}, facts)),
     compact ? null : kpis,
-    el("h3", {}, "Stock por talla y color (pares)"), matrix,
+    el("h3", {}, "Pares por talla y color"), matrix,
     el("p.small.muted", {}, "Verde: disponible · ámbar: stock bajo · rojo: agotado · recuadro: variante reconocida."));
 }
 

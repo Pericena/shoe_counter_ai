@@ -65,7 +65,9 @@ def _identify_on_create(count, stored):
     try:
         from ..ocr.services import identify
         with Image.open(absolute_path(stored)) as image:
-            found = identify(image)
+            # Solo el código de barras aquí. El OCR de texto carga otro modelo y dejaba
+            # la petición en «Procesando» sin mostrar la foto ni las cajas.
+            found = identify(image, use_text=False)
     except Exception as error:  # noqa: BLE001 - la identificación es opcional
         current_app.logger.warning("No se pudo identificar el producto en el conteo: %s", error)
         return

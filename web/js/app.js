@@ -16,7 +16,7 @@ const ROUTES = [
   { path: "tienda", label: "Ver tienda pública", icon: "store", perm: "orders.view", href: "/tienda.html" },
   { group: "Datos y reportes" },
   { path: "reportes", label: "Reportes de inventario", icon: "chart", perm: "reports.view", module: "./views/reports.js" },
-  { path: "comercio", label: "Comercio exterior (BI)", icon: "globe", perm: "reports.view", module: "./views/trade.js" },
+  { path: "comercio", label: "Comercio exterior", icon: "globe", perm: "reports.view", module: "./views/trade.js" },
   { path: "importar", label: "Importar Excel/CSV", icon: "upload", perm: "imports.manage", module: "./views/imports.js" },
   { group: "Administración" },
   { path: "usuarios", label: "Usuarios", icon: "users", perm: "users.manage", module: "./views/users.js" },
@@ -69,7 +69,7 @@ async function route() {
   const target = ROUTES.find((r) => r.path === path && r.module);
   document.querySelectorAll("#nav a").forEach((a) => a.toggleAttribute("aria-current", a.dataset.path === path));
   document.querySelectorAll("#nav a[aria-current]").forEach((a) => a.setAttribute("aria-current", "page"));
-  document.getElementById("sidebar").classList.remove("open");
+  closeMenu();
   if (!target) {
     view.replaceChildren(empty("Página no encontrada", "Usa el menú lateral para navegar."));
     return;
@@ -94,14 +94,24 @@ async function route() {
   }
 }
 
+function closeMenu() {
+  document.getElementById("sidebar").classList.remove("open");
+  document.getElementById("nav-backdrop").classList.remove("show");
+  document.body.classList.remove("nav-open");
+  document.getElementById("menu-btn").setAttribute("aria-expanded", "false");
+}
+
 async function start() {
   const menu = document.getElementById("menu-btn");
   menu.append(icon("menu"));
   menu.addEventListener("click", () => {
-    const sidebar = document.getElementById("sidebar");
-    sidebar.classList.toggle("open");
-    menu.setAttribute("aria-expanded", sidebar.classList.contains("open"));
+    const open = !document.getElementById("sidebar").classList.contains("open");
+    document.getElementById("sidebar").classList.toggle("open", open);
+    document.getElementById("nav-backdrop").classList.toggle("show", open);
+    document.body.classList.toggle("nav-open", open);
+    menu.setAttribute("aria-expanded", String(open));
   });
+  document.getElementById("nav-backdrop").addEventListener("click", closeMenu);
   try {
     const data = await loadSession();
     if (!data.user) {

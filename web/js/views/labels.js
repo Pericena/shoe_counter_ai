@@ -104,7 +104,7 @@ export async function render(root, _params, ctx) {
         el("div.ocr-lines", {}, data.lines.length ? data.lines.map((l) => `${l.text}   (${Math.round(l.confidence * 100)}%)`).join("\n") : "Sin texto legible."))),
     ...data.cards.map((card) => productCard(card, {
       title: data.matches.length ? "Producto registrado reconocido" : "Posible producto (misma marca y talla, sin código exacto)" })),
-    el("div.card", {}, el("h2", {}, data.matches.length ? "Variante encontrada en el inventario" : "Coincidencias"),
+    el("div.card", {}, el("h2", {}, data.matches.length ? "Variantes encontradas en el inventario" : "Variantes parecidas"),
       data.matches.length ? table(data.matches)
         : data.suggestions.length ? el("div", {}, el("p.muted", {}, "No hay coincidencia exacta de código; variantes de la misma marca y talla:"), table(data.suggestions))
           : empty("Sin coincidencias", "El código o SKU no está registrado. Puedes crear el producto con los datos detectados."),

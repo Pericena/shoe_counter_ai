@@ -27,7 +27,7 @@ function batchView(batch, onChange) {
   }
   if (s.mapping) {
     card.append(el("details", {}, el("summary", {}, "Columnas detectadas"),
-      el("p.small", {}, "Asignadas: ", Object.entries(s.mapping).map(([k, v]) => `${v} → ${k}`).join(" · ")),
+      el("p.small", {}, "Asignadas: ", Object.entries(s.mapping).map(([k, v]) => `${v} = ${k}`).join(" · ")),
       s.extra_columns?.length ? el("p.small.muted", {}, `Ignoradas: ${s.extra_columns.join(", ")}`) : null));
   }
   if (s.preview?.length) {
@@ -127,12 +127,12 @@ export async function render(root, params) {
       { label: "Archivo", render: (b) => b.file_name },
       { label: "Usuario", render: (b) => b.user },
       { label: "Válidas / rechazadas", className: "num", render: (b) => `${b.valid_rows} / ${b.rejected}` },
-      { label: "Añad. / act. / sin cambios", className: "num", render: (b) => b.status === "confirmado" ? `${b.added} / ${b.updated} / ${b.skipped}` : "—" },
+      { label: "Altas / actualizadas / sin cambios", className: "num", render: (b) => b.status === "confirmado" ? `${b.added} / ${b.updated} / ${b.skipped}` : "—" },
       { label: "Estado", render: (b) => badge(b.status === "confirmado" ? "good" : b.status === "descartado" ? "" : "info", b.status) },
     ],
   });
 
-  root.append(pageHead("Importar Excel / CSV", "Validación previa, detección de duplicados, informe de filas rechazadas y registro de cada importación."),
+  root.append(pageHead("Importar Excel/CSV", "Valida el archivo, muestra duplicados y filas rechazadas, y guarda el historial de cada importación."),
     el("div.stack", {}, form, result, el("div.card", {}, el("h2", {}, "Historial de importaciones"), history.node)));
   history.reload();
   if (params[0]) {

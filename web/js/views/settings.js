@@ -2,7 +2,7 @@ import { api } from "../api.js";
 import { badge, el, fmt, pageHead } from "../ui.js";
 
 export async function render(root, _params, { can, session }) {
-  root.append(pageHead("Configuración", "Tu cuenta y el estado del sistema."));
+  root.append(pageHead("Configuración", "Tu cuenta, el detector de zapatos y si los servicios responden."));
   const grid = el("div.grid.cols-2");
   root.append(grid);
   grid.append(el("div.card", {}, el("h2", {}, "Mi cuenta"), el("dl.dl", {},
@@ -38,7 +38,7 @@ export async function render(root, _params, { can, session }) {
   const health = await api.get("/api/health");
   grid.append(el("div.card", {}, el("h2", {}, "Servicios"), el("ul.list", {},
     el("li", {}, el("span", {}, "API"), badge("good", "En línea")),
-    el("li", {}, el("span", {}, "Base de datos"), badge(health.database === "ok" ? "good" : "bad", health.database)),
-    el("li", {}, el("span", {}, "Pagos en línea"), badge("warn", "No configurado: cobro manual")),
-    el("li", {}, el("span", {}, "Correo de recuperación"), el("span.small.muted", {}, "Se activa con las variables SMTP_*")))));
+    el("li", {}, el("span", {}, "Base de datos"), badge(health.database === "ok" ? "good" : "bad", health.database === "ok" ? "Conectada" : "Sin conexión")),
+    el("li", {}, el("span", {}, "Pagos en línea"), badge("warn", "Cobro manual, sin pasarela")),
+    el("li", {}, el("span", {}, "Correo de recuperación"), el("span.small.muted", {}, "Si no está activo, un administrador restablece la contraseña")))));
 }

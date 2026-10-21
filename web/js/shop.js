@@ -1,7 +1,7 @@
 // Tienda pública: catálogo conectado al inventario, carrito local y pedidos.
 // El carrito vive en este navegador (localStorage); precios y stock se validan siempre en el servidor.
 import { api, loadSession } from "./api.js";
-import { el, empty, errorText, field, fmt, modal, options, toast } from "./ui.js";
+import { el, empty, errorText, field, fmt, icon, modal, options, toast } from "./ui.js";
 
 const CART_KEY = "shoe-shop-cart-v1";
 const shop = document.getElementById("shop");
@@ -29,7 +29,7 @@ function addToCart(product, variant) {
 
 function productCard(product) {
   let selected = null;
-  const price = el("div.price", {}, product.price_from ? `desde ${fmt.money(product.price_from)}` : "");
+  const price = el("div.price", {}, product.price_from ? `Desde ${fmt.money(product.price_from)}` : "");
   const add = el("button.btn.primary", { type: "button", disabled: true }, "Elegir talla y color");
   const chips = el("div.chips", {}, product.variants.map((v) => {
     const chip = el("button.chip", {
@@ -51,7 +51,7 @@ function productCard(product) {
   add.addEventListener("click", () => selected && addToCart(product, selected));
   const photo = product.images.length
     ? el("img", { src: product.images[0].url, alt: `${product.brand} ${product.model_name}`, loading: "lazy" })
-    : el("span.small", {}, "Sin foto");
+    : el("span.photo-placeholder", {}, icon("image"), el("span.small", {}, "Sin foto"));
   return el("article.product", {}, el("div.photo", {}, photo), el("div.info", {},
     el("div.brand", {}, product.brand), el("div.name", {}, product.model_name),
     product.category ? el("div.small.muted", {}, product.category) : null,
@@ -86,7 +86,7 @@ async function start() {
   const available = el("input", { type: "checkbox" });
   const list = el("div");
   const values = () => ({ q: q.value, size: size.value, color: color.value, category_id: category.value, available: available.checked ? "1" : "" });
-  shop.append(el("h1", {}, "Catálogo"), el("p.muted", {}, "Disponibilidad en tiempo real."),
+  shop.append(el("h1", {}, "Catálogo"), el("p.muted", {}, "Pares disponibles ahora, según el inventario de la tienda."),
     el("form.filters", {
       on: {
         async submit(e) {
@@ -182,6 +182,10 @@ function lookupDialog() {
   });
 }
 
-document.getElementById("cart-btn").addEventListener("click", cartDialog);
-document.getElementById("lookup-btn").addEventListener("click", lookupDialog);
+const lookupBtn = document.getElementById("lookup-btn");
+const cartBtn = document.getElementById("cart-btn");
+lookupBtn.prepend(icon("tag"));
+cartBtn.prepend(icon("cart"));
+cartBtn.addEventListener("click", cartDialog);
+lookupBtn.addEventListener("click", lookupDialog);
 start();

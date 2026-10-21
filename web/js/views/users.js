@@ -1,16 +1,45 @@
 import { api } from "../api.js";
 import { badge, el, field, fmt, formValues, icon, modal, options, pageHead, showError, toast } from "../ui.js";
 
+const PERMISSION_LABELS = {
+  "dashboard.view": "Ver el panel",
+  "products.view": "Ver productos y catálogos",
+  "products.manage": "Editar productos, catálogos y fotos",
+  "prices.manage": "Modificar costos y precios",
+  "inventory.view": "Ver existencias y movimientos",
+  "inventory.sell": "Registrar ventas y devoluciones de clientes",
+  "inventory.move": "Registrar entradas, ajustes y conteos físicos",
+  "locations.manage": "Gestionar tiendas y almacenes",
+  "pos.sell": "Vender en el punto de venta",
+  "returns.manage": "Procesar devoluciones",
+  "counts.create": "Crear conteos con foto",
+  "counts.confirm": "Confirmar conteos y conciliar stock",
+  "purchases.manage": "Crear y recibir órdenes de compra",
+  "purchases.approve": "Aprobar órdenes de compra",
+  "imports.manage": "Importar Excel/CSV",
+  "exports.run": "Exportar datos e informes",
+  "reports.view": "Ver reportes y comercio exterior",
+  "bi.view": "Consultar datos analíticos",
+  "orders.view": "Ver pedidos online",
+  "orders.manage": "Cambiar el estado de los pedidos",
+  "integrations.manage": "Configurar integraciones",
+  "notifications.view": "Ver notificaciones",
+  "users.manage": "Gestionar usuarios",
+  "audit.view": "Ver la auditoría",
+  "settings.view": "Ver la configuración",
+  "settings.manage": "Cambiar parámetros del sistema",
+};
+
 export async function render(root) {
   const roles = (await api.get("/api/roles")).items;
   const list = el("div");
-  root.append(pageHead("Usuarios", "Las contraseñas se guardan con hash scrypt. Los usuarios nuevos deben cambiar su contraseña temporal al entrar.",
+  root.append(pageHead("Usuarios", "Las contraseñas se guardan cifradas. Quien entra por primera vez debe cambiar la contraseña temporal.",
     el("button.btn.primary", { type: "button", on: { click: () => userDialog(null) } }, icon("plus"), "Nuevo usuario")),
   list,
   el("div.card", { class: "stack" }, el("h2", {}, "Roles y permisos"), el("div.table-wrap", {}, el("table", {},
     el("thead", {}, el("tr", {}, el("th", {}, "Rol"), el("th", {}, "Permisos"))),
-    el("tbody", {}, roles.map((r) => el("tr", {}, el("td", {}, el("strong", {}, r.name), el("div.small.muted", {}, r.code)),
-      el("td.wrap", {}, r.permissions.join(", ")))))))));
+    el("tbody", {}, roles.map((r) => el("tr", {}, el("td", {}, el("strong", {}, r.name)),
+      el("td.wrap", {}, r.permissions.map((code) => PERMISSION_LABELS[code] || code).join(" · ")))))))));
 
   async function load() {
     const users = (await api.get("/api/users")).items;

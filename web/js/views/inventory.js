@@ -84,11 +84,11 @@ export async function render(root, _params, { can }) {
     onRows: (data) => {
       const s = data.summary;
       summary.replaceChildren(
-        el("div.kpi", {}, el("div.label", {}, "Variantes (filtro)"), el("div.value", {}, fmt.int(s.variants))),
-        el("div.kpi", {}, el("div.label", {}, "Pares"), el("div.value", {}, fmt.int(s.pairs))),
-        el("div.kpi", {}, el("div.label", {}, "Valor a costo"), el("div.value", {}, fmt.money(s.inventory_value_at_cost)),
+        el("div.kpi", {}, el("div.label", {}, "Variantes en este filtro"), el("div.value", {}, fmt.int(s.variants))),
+        el("div.kpi", {}, el("div.label", {}, "Pares en este filtro"), el("div.value", {}, fmt.int(s.pairs))),
+        el("div.kpi", {}, el("div.label", {}, "Valor a costo del filtro"), el("div.value", {}, fmt.money(s.inventory_value_at_cost)),
           s.inventory_value_complete ? null : el("div.note", {}, "Incompleto: hay variantes con stock y sin costo")),
-        el("div.kpi", {}, el("div.label", {}, "Bajo / agotado"), el("div.value", {}, `${s.low} / ${s.out}`)));
+        el("div.kpi", {}, el("div.label", {}, "Stock bajo / agotados"), el("div.value", {}, `${s.low} / ${s.out}`)));
     },
     emptyNode: empty("No hay variantes con estos filtros", "Crea productos y variantes en «Productos» o importa tu catálogo."),
     columns: [

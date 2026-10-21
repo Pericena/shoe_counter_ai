@@ -35,7 +35,7 @@ export async function render(root, params, ctx) {
 async function renderDetail(root, id, { can }) {
   const order = await api.get(`/api/orders/${id}`);
   const reload = () => { root.replaceChildren(); renderDetail(root, id, { can }); };
-  root.append(pageHead(`Pedido ${order.code}`, `${fmt.datetime(order.created_at)} · ${order.status_label}`, el("a.btn", { href: "#/pedidos" }, "← Pedidos")));
+  root.append(pageHead(`Pedido ${order.code}`, `${fmt.datetime(order.created_at)} · ${order.status_label}`, el("a.btn", { href: "#/pedidos" }, icon("arrow-left"), "Pedidos")));
   const grid = el("div.grid.cols-2");
   grid.append(el("div.card", {}, el("h2", {}, "Cliente"), el("dl.dl", {},
     el("dt", {}, "Nombre"), el("dd", {}, order.customer_name), el("dt", {}, "Correo"), el("dd", {}, order.customer_email),
@@ -45,10 +45,10 @@ async function renderDetail(root, id, { can }) {
   if (can("orders.manage") && order.allowed_transitions.length) {
     actions.append(el("div.actions", {}, order.allowed_transitions.map((next) => el(`button.btn${next === "cancelado" || next === "devuelto" ? ".danger" : ".primary"}`, {
       type: "button", on: { click: () => transition(next) },
-    }, `→ ${LABELS[next][1]}`))));
-    actions.append(el("p.small.muted", {}, "Cancelar repone el stock reservado. «Devuelto» lo repone como devolución de cliente."));
+    }, LABELS[next][1]))));
+    actions.append(el("p.small.muted", {}, "Cancelar devuelve al stock los pares reservados. Devuelto los registra como devolución de cliente."));
   } else if (!order.allowed_transitions.length) {
-    actions.append(el("p.muted", {}, "Estado final."));
+    actions.append(el("p.muted", {}, "Este pedido ya no cambia de estado."));
   }
   grid.append(actions);
   root.append(grid, el("div.stack", {},

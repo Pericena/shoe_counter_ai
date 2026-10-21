@@ -5,7 +5,7 @@ import { el, empty, fmt, icon, options, pageHead, pagedTable, queryString, showE
 
 export async function render(root, _params, { can }) {
   const opts = await api.get("/api/trade/options");
-  root.append(pageHead("Comercio exterior de calzado", "Importaciones y exportaciones por año, socio y categoría (datos importados; no son ventas de la tienda)."));
+  root.append(pageHead("Comercio exterior", "Importaciones y exportaciones de calzado por año, socio y categoría. Son datos importados: no son ventas de esta tienda."));
   if (!opts.years.length) {
     root.append(empty("No hay datos comerciales importados",
       "Importa el archivo de comercio exterior (columnas País_reportante, Flujo_comercial, Año, Código_SA6, …) desde «Importar Excel/CSV».",
@@ -36,7 +36,7 @@ export async function render(root, _params, { can }) {
         api.get("/api/trade/summary" + queryString({ ...filters(), metric: metric.value })),
         api.get("/api/trade/synthesis" + queryString(filters()))]);
       body.replaceChildren();
-      if (!summary.records) { body.append(empty("Sin registros con estos filtros", "")); return; }
+      if (!summary.records) { body.append(empty("Sin registros con estos filtros", "Amplía el rango de años o quita un filtro de flujo, categoría o socio.")); return; }
       const flows = [...new Set(summary.by_year_flow.map((r) => r.flow))];
       const years = [...new Set(summary.by_year_flow.map((r) => r.year))].sort();
       const pick = (f, key) => years.map((y) => summary.by_year_flow.find((r) => r.year === y && r.flow === f)?.[key] ?? 0);
@@ -52,21 +52,21 @@ export async function render(root, _params, { can }) {
       const grid = el("div.grid.cols-2");
       body.append(grid);
       const flowSeries = flows.slice(0, 3).map((f, i) => ({ name: f, cls: cls[i] }));
-      grid.append(el("div.card", {}, el("h2", {}, "1. Importaciones vs. exportaciones — valor (USD)"),
+      grid.append(el("div.card", {}, el("h2", {}, "Valor por flujo y año (USD)"),
         barChart({ categories: years, series: flowSeries.map((s) => ({ ...s, values: pick(s.name, "value_usd") })), format: fmt.int, categoryLabel: "Año" })));
-      grid.append(el("div.card", {}, el("h2", {}, "1b. Importaciones vs. exportaciones — cantidad (pares)"),
+      grid.append(el("div.card", {}, el("h2", {}, "Cantidad por flujo y año (pares)"),
         barChart({ categories: years, series: flowSeries.map((s) => ({ ...s, values: pick(s.name, "quantity_pairs") })), format: fmt.int, categoryLabel: "Año",
           note: "Mismo período en un gráfico aparte: valor y cantidad tienen escalas distintas y no comparten eje." })));
-      grid.append(el("div.card", {}, el("h2", {}, `2. Principales socios por ${metric.value === "value_usd" ? "valor USD" : "pares"}`),
+      grid.append(el("div.card", {}, el("h2", {}, `Principales socios por ${metric.value === "value_usd" ? "valor USD" : "pares"}`),
         hBarChart({ items: summary.top_partners.map((p) => ({ label: `${p.partner} (${p.flow})`, value: p[metric.value] })),
           name: metric.value === "value_usd" ? "Valor USD" : "Pares", format: fmt.int })));
       const perPairYears = [...new Set(summary.value_per_pair_by_year.map((r) => r.year))].sort();
-      grid.append(el("div.card", {}, el("h2", {}, "3. Valor aproximado por par (USD)"),
+      grid.append(el("div.card", {}, el("h2", {}, "Valor aproximado por par (USD)"),
         perPairYears.length ? lineChart({
           categories: perPairYears,
           series: flowSeries.map((s) => ({ ...s, values: perPairYears.map((y) => summary.value_per_pair_by_year.find((r) => r.year === y && r.flow === s.name)?.value_per_pair ?? null) })),
           format: (v) => fmt.dec(v), categoryLabel: "Año",
-          note: "Σ Valor_USD / Σ Cantidad_pares, solo filas con ambos > 0 y sin agregados. Es un promedio que mezcla productos distintos: no es un precio unitario real.",
+          note: "Suma del valor en USD dividida entre la suma de pares, solo filas con ambos mayores que 0 y sin agregados. Mezcla productos distintos: no es un precio de venta de la tienda.",
         }) : empty("No calculable", "No hay filas con valor y cantidad válidos.")));
 
       if (summary.annual_variation.length) {

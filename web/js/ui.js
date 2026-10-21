@@ -21,6 +21,9 @@ const ICONS = {
   download: "M12 4v12M7 11l5 5 5-5M4 20h16",
   tag: "M20 12l-8 8-9-9V3h8zM7.5 7.5h.01",
   close: "M6 6l12 12M18 6L6 18",
+  check: "M5 12l5 5L20 7",
+  "arrow-left": "M19 12H5M11 6l-6 6 6 6",
+  image: "M4 5h16v14H4zM4 15l4-4 3 3 2-2 5 5M8 9h.01",
   key: "M15 7a4 4 0 1 1-3.9 4.9L3 20v-3h3v-3h3l1.1-1.1A4 4 0 0 1 15 7z",
   list: "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01",
 };

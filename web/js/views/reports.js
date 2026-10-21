@@ -17,7 +17,7 @@ export async function render(root, _params, { can }) {
   const params = () => ({ from: from.value, to: to.value, category_id: category.value, brand_id: brand.value });
 
   root.append(pageHead("Reportes de inventario", "Indicadores calculados con los movimientos registrados. Las fórmulas se indican bajo cada bloque.",
-    can("exports.run") ? el("button.btn", { type: "button", on: { click: () => download("/api/reports/inventario.pdf").catch(showError) } }, icon("download"), "Informe PDF de inventario") : null),
+    can("exports.run") ? el("button.btn", { type: "button", on: { click: () => download("/api/reports/inventario.pdf").catch(showError) } }, icon("download"), "PDF del inventario actual") : null),
   el("form.filters", { on: { submit: (e) => { e.preventDefault(); load(); } } },
     el("label.field", {}, "Desde", from), el("label.field", {}, "Hasta", to), el("label.field", {}, "Agrupar por", group),
     el("label.field", {}, "Categoría", category), el("label.field", {}, "Marca", brand), el("button.btn.primary", { type: "submit" }, "Actualizar")),
@@ -40,7 +40,7 @@ export async function render(root, _params, { can }) {
         series: [{ name: "Entradas", cls: "s1", values: series.series.map((p) => p.entradas) },
           { name: "Salidas", cls: "s2", values: series.series.map((p) => p.salidas) }],
         categoryLabel: "Período",
-        note: "Entradas = Σ cantidades positivas; salidas = Σ |cantidades negativas| (ventas, pedidos, devoluciones a proveedor, ajustes y conteos a la baja).",
+        note: "Entradas: suma de cantidades positivas. Salidas: suma de cantidades negativas (ventas, pedidos, devoluciones a proveedor, ajustes y conteos a la baja).",
       }) : empty("Sin movimientos en el período", "Amplía el rango de fechas o registra movimientos."));
       const totals = Object.entries(series.totals_by_type);
       if (totals.length) {
@@ -49,17 +49,17 @@ export async function render(root, _params, { can }) {
       }
       body.append(movCard);
 
-      const rotCard = el("div.card", {}, el("h2", {}, "Productos de mayor rotación"));
+      const rotCard = el("div.card", {}, el("h2", {}, "Ventas netas y rotación"));
       if (!rotation.has_data) {
         rotCard.append(empty("Sin datos suficientes", rotation.message));
       } else {
         rotCard.append(hBarChart({
-          items: rotation.items.map((i) => ({ label: `${i.sku} (T${i.size})`, value: i.net_units })),
+          items: rotation.items.map((i) => ({ label: `${i.sku} · talla ${i.size}`, value: i.net_units })),
           name: "Unidades vendidas netas",
           note: "Unidades netas = ventas + pedidos online − devoluciones de clientes del período.",
         }));
         rotCard.append(el("div.table-wrap", {}, el("table", {},
-          el("thead", {}, el("tr", {}, ["SKU", "Producto", "Vendidas", "Devueltas", "Stock inicio", "Stock fin", "Stock medio", "Rotación"].map((h) => el("th", {}, h)))),
+          el("thead", {}, el("tr", {}, ["SKU", "Producto", "Ventas", "Devoluciones", "Stock inicio", "Stock fin", "Stock medio", "Rotación"].map((h) => el("th", {}, h)))),
           el("tbody", {}, rotation.items.map((i) => el("tr", {}, el("td.mono", {}, i.sku), el("td", {}, `${i.product} · ${i.color}`),
             el("td.num", {}, i.units_sold), el("td.num", {}, i.returns), el("td.num", {}, i.stock_start), el("td.num", {}, i.stock_end),
             el("td.num", {}, fmt.dec(i.average_stock, 1)), el("td.num", {}, i.rotation === null ? "—" : fmt.dec(i.rotation))))))),
@@ -69,9 +69,9 @@ export async function render(root, _params, { can }) {
 
       const adjCard = el("div.card", {}, el("h2", {}, "Ajustes y diferencias de conteo físico"),
         el("div.kpis", {},
-          el("div.kpi", {}, el("div.label", {}, "Pares sumados por ajuste"), el("div.value", {}, `+${fmt.int(adjustments.total_positive)}`)),
-          el("div.kpi", {}, el("div.label", {}, "Pares restados por ajuste"), el("div.value", {}, `−${fmt.int(adjustments.total_negative)}`)),
-          el("div.kpi", {}, el("div.label", {}, "Conteos físicos con diferencia"), el("div.value", {}, fmt.int(adjustments.physical_counts_with_difference)))));
+          el("div.kpi", {}, el("div.label", {}, "Pares sumados"), el("div.value", {}, `+${fmt.int(adjustments.total_positive)}`), el("div.note", {}, "Ajustes y conteos físicos")),
+          el("div.kpi", {}, el("div.label", {}, "Pares restados"), el("div.value", {}, `−${fmt.int(adjustments.total_negative)}`), el("div.note", {}, "Ajustes y conteos físicos")),
+          el("div.kpi", {}, el("div.label", {}, "Conteos físicos"), el("div.value", {}, fmt.int(adjustments.physical_counts_with_difference)))));
       adjCard.append(adjustments.items.length ? el("div.table-wrap", {}, el("table", {},
         el("thead", {}, el("tr", {}, ["Fecha", "SKU", "Tipo", "Diferencia", "Saldo", "Motivo", "Usuario"].map((h) => el("th", {}, h)))),
         el("tbody", {}, adjustments.items.map((m) => el("tr", {}, el("td", {}, fmt.datetime(m.created_at)), el("td.mono", {}, m.sku),
@@ -82,7 +82,7 @@ export async function render(root, _params, { can }) {
 
       const aiCard = el("div.card", {}, el("h2", {}, "Conteos inteligentes"));
       if (!counts.total) {
-        aiCard.append(empty("Sin conteos en el período", "Los conteos con foto aparecerán aquí."));
+        aiCard.append(empty("Sin conteos en el período", "Los conteos de este rango de fechas aparecerán aquí."));
       } else {
         aiCard.append(el("div.kpis", {},
           el("div.kpi", {}, el("div.label", {}, "Conteos"), el("div.value", {}, fmt.int(counts.total))),

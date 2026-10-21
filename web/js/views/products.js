@@ -161,6 +161,22 @@ function supplierDialog(supplier, done) {
   });
 }
 
+function segment(label, control, choices, current) {
+  const buttons = choices.map(([id, name]) => el("button.segment-btn", {
+    type: "button",
+    "aria-pressed": String(String(current) === id),
+    on: {
+      click() {
+        if (control.type === "checkbox") control.checked = id === "1";
+        else control.value = id;
+        buttons.forEach((button, index) => button.setAttribute("aria-pressed", String(choices[index][0] === id)));
+      },
+    },
+  }, name));
+  control.classList.add("sr-only");
+  return el("div.field", {}, el("span", {}, label), el("div.segment", {}, buttons), control);
+}
+
 function productForm(product, prefill = {}) {
   const brandId = product?.brand_id ?? catalogs.brands.find((b) => b.name.toLowerCase() === (prefill.brand || "").toLowerCase())?.id;
   if (!catalogs.brands.length) {
@@ -173,11 +189,13 @@ function productForm(product, prefill = {}) {
     field("Categoría", options(el("select", { name: "category_id" }), catalogs.categories, { placeholder: "Sin categoría", selected: product?.category_id })),
     field("Tipo de calzado", el("input", { name: "footwear_type", maxlength: 100, value: product?.footwear_type || "", placeholder: "Zapatilla, bota, sandalia…" })),
     field("Proveedor", options(el("select", { name: "supplier_id" }), catalogs.suppliers, { placeholder: "Sin proveedor", selected: product?.supplier_id })),
-    field("Estado", options(el("select", { name: "status" }), [{ id: "activo", name: "Activo" }, { id: "inactivo", name: "Inactivo" },
-      { id: "descontinuado", name: "Descontinuado" }], { selected: product?.status || "activo" })),
+    segment("Estado en inventario", options(el("select", { name: "status" }), [
+      { id: "activo", name: "Activo" }, { id: "inactivo", name: "Inactivo" }, { id: "descontinuado", name: "Descontinuado" },
+    ], { selected: product?.status || "activo" }), [["activo", "Activo"], ["inactivo", "Inactivo"]], product?.status || "activo"),
+    segment("Tienda", el("input", { type: "checkbox", name: "is_published", checked: Boolean(product?.is_published) }),
+      [["0", "No publicar"], ["1", "Publicar"]], product?.is_published ? "1" : "0"),
+    el("p.full.small.muted", {}, "Publicar lo muestra en la tienda solo si está activo y la talla tiene precio. No publicar lo deja solo en el inventario."),
     el("label.field.full", {}, "Descripción", el("textarea", { name: "description", maxlength: 5000 }, product?.description || "")),
-    el("label.check.full", {}, el("input", { type: "checkbox", name: "is_published", checked: Boolean(product?.is_published) }),
-      "Publicar en la tienda online (solo variantes activas con precio)"),
     photoPicker());
 }
 
@@ -245,8 +263,9 @@ function variantDialog(product, variant, done, prefill = {}) {
       field("Costo de adquisición", el("input", { name: "cost", type: "number", min: 0, step: "0.01", value: variant?.cost ?? "" })),
       field("Precio de venta", el("input", { name: "price", type: "number", min: 0, step: "0.01", value: variant?.price ?? prefill.price ?? "" })),
       field("Stock mínimo (alerta)", el("input", { name: "min_stock", type: "number", min: 0, step: 1, value: variant?.min_stock ?? 0 })),
-      field("Estado", options(el("select", { name: "status" }), [{ id: "activo", name: "Activo" }, { id: "inactivo", name: "Inactivo" },
-        { id: "descontinuado", name: "Descontinuado" }], { selected: variant?.status || "activo" })),
+      segment("Estado de esta talla", options(el("select", { name: "status" }), [
+        { id: "activo", name: "Activo" }, { id: "inactivo", name: "Inactivo" }, { id: "descontinuado", name: "Descontinuado" },
+      ], { selected: variant?.status || "activo" }), [["activo", "Activo"], ["inactivo", "Inactivo"]], variant?.status || "activo"),
       variant ? null : el("p.full.small.muted", {}, "La variante empieza con 0 pares. El stock se suma registrando una entrada en Existencias."));
     body.append(form);
     foot.append(el("button.btn", { type: "button", on: { click: () => close(null) } }, "Cancelar"),
@@ -291,7 +310,7 @@ async function renderDetail(root, productId, { can }) {
     api.get(`/api/products/${productId}`), api.get(`/api/products/${productId}/overview`)]);
   const reload = () => { root.replaceChildren(); renderDetail(root, productId, { can }); };
   root.append(pageHead(`${product.brand} ${product.model_name}`, `Código ${product.code} · ${product.category || "sin categoría"}`,
-    el("a.btn", { href: "#/productos" }, "← Volver"),
+    el("a.btn", { href: "#/productos" }, icon("arrow-left"), "Productos"),
     manage ? el("button.btn", { type: "button", on: { click: () => productDialog(product, reload) } }, "Editar producto") : null,
     manage ? el("button.btn.primary", { type: "button", on: { click: () => variantDialog(product, null, reload) } }, icon("plus"), "Nueva variante") : null));
 
@@ -301,8 +320,8 @@ async function renderDetail(root, productId, { can }) {
     el("dt", {}, "Marca"), el("dd", {}, product.brand),
     el("dt", {}, "Tipo"), el("dd", {}, product.footwear_type || "—"),
     el("dt", {}, "Proveedor"), el("dd", {}, product.supplier_name || "—"),
-    el("dt", {}, "Estado"), el("dd", {}, badge(product.status === "activo" ? "good" : "", product.status)),
-    el("dt", {}, "Tienda online"), el("dd", {}, product.is_published ? badge("info", "Publicado") : "No publicado"),
+    el("dt", {}, "Estado"), el("dd", {}, badge(product.status === "activo" ? "good" : "", product.status === "activo" ? "Activo" : product.status === "inactivo" ? "Inactivo" : product.status)),
+    el("dt", {}, "Tienda"), el("dd", {}, product.is_published ? badge("info", "Publicado") : badge("", "No publicado")),
     el("dt", {}, "Creado"), el("dd", {}, fmt.datetime(product.created_at)),
     el("dt", {}, "Descripción"), el("dd", {}, product.description || "—"))));
 
@@ -317,7 +336,7 @@ async function renderDetail(root, productId, { can }) {
           try { await api.del(`/api/products/${product.id}/images/${img.id}`); reload(); } catch (e) { showError(e); }
         },
       },
-    }, "✕") : null)));
+    }, icon("close"), el("span.sr-only", {}, "Quitar foto")) : null)));
   photos.append(product.images.length ? gallery : el("p.muted", {}, "Sin fotos."));
   if (manage) {
     const input = el("input", { type: "file", accept: "image/jpeg,image/png,image/webp", class: "sr-only", id: "photo-input" });
